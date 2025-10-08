@@ -61,7 +61,7 @@ app.post('/detect-erd', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout',
+        model: 'meta-llama/llama-4-scout:free',
         messages: [{
           role: 'user',
           content: [
@@ -159,7 +159,7 @@ CRITICAL RULES:
   }
 });
 
-// 🆕 NEW ENDPOINT: Analyze rubric for grading criteria
+// 🆕 Rubric analysis endpoint
 app.post('/detect-rubric', async (req, res) => {
   try {
     const { rubricUrl } = req.body;
@@ -188,7 +188,9 @@ app.post('/detect-rubric', async (req, res) => {
     const fileExtension = rubricUrl.toLowerCase().split('.').pop();
     const mimeType = fileExtension === 'pdf' ? 'application/pdf' : 'image/png';
 
-    // Call OpenRouter AI with rubric analysis prompt
+    console.log('File type detected:', mimeType);
+
+    // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -196,13 +198,13 @@ app.post('/detect-rubric', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout',
+        model: 'meta-llama/llama-4-scout:free',
         messages: [{
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `Analyze this grading rubric. Return ONLY valid JSON.
+              text: `Analyze this grading rubric. Return ONLY valid JSON with no markdown formatting.
 
 SCOPE - WE EXTRACT:
 ✅ Rubrics for ERD diagram grading
@@ -217,42 +219,17 @@ SCOPE - WE EXTRACT:
 - Non-grading documents
 
 IF NOT AN ERD RUBRIC:
-{
-  "isERDRubric": false,
-  "reason": "This rubric is for SQL queries, not ERD diagrams"
-}
+{"isERDRubric":false,"reason":"This rubric is for SQL queries, not ERD diagrams"}
 
 IF IS AN ERD RUBRIC:
-{
-  "isERDRubric": true,
-  "totalPoints": 100,
-  "criteria": [
-    {
-      "category": "Entities",
-      "maxPoints": 30,
-      "description": "All entities correctly identified with proper notation (rectangles). Strong/weak entities distinguished."
-    },
-    {
-      "category": "Relationships",
-      "maxPoints": 30,
-      "description": "Cardinality correct (1:1, 1:N, M:N). Relationship names meaningful."
-    },
-    {
-      "category": "Attributes",
-      "maxPoints": 25,
-      "description": "All attributes mapped correctly. Primary keys underlined. Composite/multivalued shown properly."
-    }
-  ],
-  "notes": "Rubric emphasizes correct notation and completeness"
-}
+{"isERDRubric":true,"totalPoints":100,"criteria":[{"category":"Entities","maxPoints":30,"description":"All entities correctly identified with proper notation"},{"category":"Relationships","maxPoints":30,"description":"Cardinality correct. Relationship names meaningful."}],"notes":"Rubric emphasizes correct notation"}
 
 CRITICAL RULES:
-- Each criterion MUST have: "category" (string), "maxPoints" (number), "description" (string)
-- totalPoints should sum up all maxPoints (if not explicitly stated, infer from criteria)
-- If points not clearly stated, estimate based on emphasis (e.g., if rubric says "Entities are important" → assume higher points)
-- Extract ALL grading aspects mentioned (even if vague)
-- If rubric is vague/unstructured, do your best to extract meaningful criteria
-- Return ONLY JSON, no markdown, no extra text`
+- Return ONLY valid JSON, no markdown code blocks, no extra text
+- Each criterion MUST have: category, maxPoints, description
+- If points not stated, estimate based on emphasis
+- Extract ALL grading aspects mentioned
+- Be concise but capture all important criteria`
             },
             {
               type: 'image_url',
@@ -267,15 +244,41 @@ CRITICAL RULES:
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      throw new Error(`OpenRouter failed: ${aiResponse.statusText} - ${errorText}`);
+      console.error('OpenRouter error:', errorText);
+      throw new Error(`OpenRouter failed: ${aiResponse.statusText}`);
     }
 
     const aiData = await aiResponse.json();
+
+    // Validate AI response structure
+    if (!aiData.choices || !aiData.choices[0] || !aiData.choices[0].message) {
+      console.error('Invalid AI response structure:', JSON.stringify(aiData, null, 2));
+      throw new Error('AI returned invalid response structure');
+    }
+
     const content = aiData.choices[0].message.content;
-    
+    console.log('Raw AI response:', content.substring(0, 200) + '...'); // Log first 200 chars
+
     // Clean markdown if present
-    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const result = JSON.parse(cleanContent);
+    const cleanContent = content
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    // Parse JSON with error handling
+    let result;
+    try {
+      result = JSON.parse(cleanContent);
+    } catch (parseError) {
+      console.error('❌ JSON Parse Error:', parseError.message);
+      console.error('Content that failed:', cleanContent);
+      throw new Error('AI returned invalid JSON format');
+    }
+
+    // Validate result structure
+    if (!result || typeof result !== 'object') {
+      throw new Error('AI response is not a valid object');
+    }
 
     console.log('✅ Rubric analysis complete');
     return res.status(200).json(result);
