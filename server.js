@@ -159,38 +159,15 @@ CRITICAL RULES:
   }
 });
 
-// 🆕 Rubric analysis endpoint
+// 🆕 Rubric analysis endpoint - NOW ACCEPTS TEXT INSTEAD OF FILE
 app.post('/detect-rubric', async (req, res) => {
   try {
-    const { rubricUrl } = req.body;
-
-    if (!rubricUrl) {
-      return res.status(400).json({ error: 'Missing rubricUrl' });
+    const { rubricText } = req.body;
+    if (!rubricText) {
+      return res.status(400).json({ error: 'Missing rubricText' });
     }
-
-    console.log('🔍 Analyzing rubric:', rubricUrl);
-
-    // Download PDF/image (60 second timeout)
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-
-    const rubricResponse = await fetch(rubricUrl, { signal: controller.signal });
-    clearTimeout(timeout);
-
-    if (!rubricResponse.ok) {
-      throw new Error('Failed to fetch rubric file');
-    }
-
-    const rubricBuffer = await rubricResponse.arrayBuffer();
-    const base64Rubric = Buffer.from(rubricBuffer).toString('base64');
-
-    // Determine file type from URL
-    const fileExtension = rubricUrl.toLowerCase().split('.').pop();
-    const mimeType = fileExtension === 'pdf' ? 'application/pdf' : 'image/png';
-
-    console.log('File type detected:', mimeType);
-
-    // Call OpenRouter AI
+    console.log('🔍 Analyzing rubric text:', rubricText.substring(0, 100) + '...');
+    // Call OpenRouter AI with text-only prompt
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -201,70 +178,52 @@ app.post('/detect-rubric', async (req, res) => {
         model: 'meta-llama/llama-4-scout:free',
         messages: [{
           role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Analyze this grading rubric. Return ONLY valid JSON with no markdown formatting.
-
+          content: `Analyze this grading rubric text. Return ONLY valid JSON with no markdown formatting.
+RUBRIC TEXT:
+${rubricText}
 SCOPE - WE EXTRACT:
 ✅ Rubrics for ERD diagram grading
 ✅ Grading categories (Entities, Relationships, Attributes, Keys, Notation, etc.)
 ✅ Point allocations per category
 ✅ Grading criteria/descriptions
 ✅ Total marks
-
 ❌ OUT OF SCOPE (reject if found):
 - Rubrics for SQL queries, normalization, or non-ERD topics
-- Completely unreadable/corrupted files
-- Non-grading documents
-
+- Completely unreadable/corrupted text
+- Non-grading content
 IF NOT AN ERD RUBRIC:
 {"isERDRubric":false,"reason":"This rubric is for SQL queries, not ERD diagrams"}
-
 IF IS AN ERD RUBRIC:
 {"isERDRubric":true,"totalPoints":100,"criteria":[{"category":"Entities","maxPoints":30,"description":"All entities correctly identified with proper notation"},{"category":"Relationships","maxPoints":30,"description":"Cardinality correct. Relationship names meaningful."}],"notes":"Rubric emphasizes correct notation"}
-
 CRITICAL RULES:
 - Return ONLY valid JSON, no markdown code blocks, no extra text
 - Each criterion MUST have: category, maxPoints, description
 - If points not stated, estimate based on emphasis
 - Extract ALL grading aspects mentioned
 - Be concise but capture all important criteria`
-            },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mimeType};base64,${base64Rubric}` }
-            }
-          ]
         }],
         temperature: 0.3,
-        max_tokens: 3000
+        max_tokens: 2000
       })
     });
-
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error('OpenRouter error:', errorText);
       throw new Error(`OpenRouter failed: ${aiResponse.statusText}`);
     }
-
     const aiData = await aiResponse.json();
-
     // Validate AI response structure
     if (!aiData.choices || !aiData.choices[0] || !aiData.choices[0].message) {
       console.error('Invalid AI response structure:', JSON.stringify(aiData, null, 2));
       throw new Error('AI returned invalid response structure');
     }
-
     const content = aiData.choices[0].message.content;
     console.log('Raw AI response:', content.substring(0, 200) + '...'); // Log first 200 chars
-
     // Clean markdown if present
     const cleanContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
       .trim();
-
     // Parse JSON with error handling
     let result;
     try {
@@ -274,25 +233,14 @@ CRITICAL RULES:
       console.error('Content that failed:', cleanContent);
       throw new Error('AI returned invalid JSON format');
     }
-
     // Validate result structure
     if (!result || typeof result !== 'object') {
       throw new Error('AI response is not a valid object');
     }
-
     console.log('✅ Rubric analysis complete');
     return res.status(200).json(result);
-
   } catch (error) {
     console.error('❌ Error:', error);
-    
-    if (error.name === 'AbortError') {
-      return res.status(408).json({ 
-        error: 'Request timeout',
-        message: 'Rubric analysis took too long',
-        isERDRubric: false
-      });
-    }
     
     return res.status(500).json({ 
       error: 'Rubric analysis failed',
