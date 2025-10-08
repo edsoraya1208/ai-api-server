@@ -159,6 +159,146 @@ CRITICAL RULES:
   }
 });
 
+// 🆕 NEW ENDPOINT: Analyze rubric for grading criteria
+app.post('/detect-rubric', async (req, res) => {
+  try {
+    const { rubricUrl } = req.body;
+
+    if (!rubricUrl) {
+      return res.status(400).json({ error: 'Missing rubricUrl' });
+    }
+
+    console.log('🔍 Analyzing rubric:', rubricUrl);
+
+    // Download PDF/image (60 second timeout)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
+    const rubricResponse = await fetch(rubricUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!rubricResponse.ok) {
+      throw new Error('Failed to fetch rubric file');
+    }
+
+    const rubricBuffer = await rubricResponse.arrayBuffer();
+    const base64Rubric = Buffer.from(rubricBuffer).toString('base64');
+
+    // Determine file type from URL
+    const fileExtension = rubricUrl.toLowerCase().split('.').pop();
+    const mimeType = fileExtension === 'pdf' ? 'application/pdf' : 'image/png';
+
+    // Call OpenRouter AI with rubric analysis prompt
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analyze this grading rubric. Return ONLY valid JSON.
+
+SCOPE - WE EXTRACT:
+✅ Rubrics for ERD diagram grading
+✅ Grading categories (Entities, Relationships, Attributes, Keys, Notation, etc.)
+✅ Point allocations per category
+✅ Grading criteria/descriptions
+✅ Total marks
+
+❌ OUT OF SCOPE (reject if found):
+- Rubrics for SQL queries, normalization, or non-ERD topics
+- Completely unreadable/corrupted files
+- Non-grading documents
+
+IF NOT AN ERD RUBRIC:
+{
+  "isERDRubric": false,
+  "reason": "This rubric is for SQL queries, not ERD diagrams"
+}
+
+IF IS AN ERD RUBRIC:
+{
+  "isERDRubric": true,
+  "totalPoints": 100,
+  "criteria": [
+    {
+      "category": "Entities",
+      "maxPoints": 30,
+      "description": "All entities correctly identified with proper notation (rectangles). Strong/weak entities distinguished."
+    },
+    {
+      "category": "Relationships",
+      "maxPoints": 30,
+      "description": "Cardinality correct (1:1, 1:N, M:N). Relationship names meaningful."
+    },
+    {
+      "category": "Attributes",
+      "maxPoints": 25,
+      "description": "All attributes mapped correctly. Primary keys underlined. Composite/multivalued shown properly."
+    }
+  ],
+  "notes": "Rubric emphasizes correct notation and completeness"
+}
+
+CRITICAL RULES:
+- Each criterion MUST have: "category" (string), "maxPoints" (number), "description" (string)
+- totalPoints should sum up all maxPoints (if not explicitly stated, infer from criteria)
+- If points not clearly stated, estimate based on emphasis (e.g., if rubric says "Entities are important" → assume higher points)
+- Extract ALL grading aspects mentioned (even if vague)
+- If rubric is vague/unstructured, do your best to extract meaningful criteria
+- Return ONLY JSON, no markdown, no extra text`
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mimeType};base64,${base64Rubric}` }
+            }
+          ]
+        }],
+        temperature: 0.3,
+        max_tokens: 3000
+      })
+    });
+
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      throw new Error(`OpenRouter failed: ${aiResponse.statusText} - ${errorText}`);
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices[0].message.content;
+    
+    // Clean markdown if present
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const result = JSON.parse(cleanContent);
+
+    console.log('✅ Rubric analysis complete');
+    return res.status(200).json(result);
+
+  } catch (error) {
+    console.error('❌ Error:', error);
+    
+    if (error.name === 'AbortError') {
+      return res.status(408).json({ 
+        error: 'Request timeout',
+        message: 'Rubric analysis took too long',
+        isERDRubric: false
+      });
+    }
+    
+    return res.status(500).json({ 
+      error: 'Rubric analysis failed',
+      message: error.message,
+      isERDRubric: false
+    });
+  }
+});
+
 // Bind to 0.0.0.0 for Render compatibility
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
