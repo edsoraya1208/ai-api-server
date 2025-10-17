@@ -100,7 +100,7 @@ CRITICAL RULES:
 - Relationships MUST have "from" and "to" (entity names)
 - Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
 - confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
-- TRY TO NOT MAKE MISTAKE/MISDETECT ANY ELEMENT PRESENT
+- do not misdetect anything especially attribute, must detect all present
 - Return ONLY JSON, no markdown, no extra text`
 
 
