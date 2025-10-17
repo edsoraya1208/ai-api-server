@@ -69,19 +69,16 @@ app.post('/detect-erd', async (req, res) => {
               type: 'text',
               text: `Analyze this ERD diagram. Return ONLY valid JSON.
 
+STEP 1 - REJECT SCHEME:
+- If you see: (d) symbols, triangle shapes, subclass/superclass hierarchies, specialization/generalization, or lines branching to multiple entity types from one parent entity → Return {"isERD": false, "reason": "This is an EERD with subclass/specialization. Only basic ERD supported."}
+- If Crow's Foot notation (>< |< symbols) → Return {"isERD": false, "reason": "Crow's Foot notation detected. Only Chen's notation supported."}
+- If not a database diagram → Return {"isERD": false, "reason": "This is not an ERD"}
+
 SCOPE - WE DETECT:
 ✅ Strong/Weak Entities
 ✅ Relationships (1:1, 1:N, M:N)
 ✅ Attributes belonging to: Entities, Relationships, or other Attributes (composite)
 ✅ Primary Key, Foreign Key, Regular, Derived, Multivalued, Composite attributes
-
-❌ OUT OF SCOPE (mark as "other" if found):
-- ISA/Inheritance relationships
-- Aggregation
-- Ternary relationships (3+ entities)
-- Participation constraints
-
-IF NOT AN ERD: {"isERD": false, "reason": "describe what it is"}
 
 IF IS AN ERD: 
 {
@@ -102,9 +99,11 @@ CRITICAL RULES:
 - Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
 - Relationships MUST have "from" and "to" (entity names)
 - Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
-- confidence: 0-100 (your certainty level)
+- confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
 - If you find ISA/inheritance, mark as type: "other", subType: "isa_relationship"
 - Return ONLY JSON, no markdown, no extra text`
+
+
             },
             {
               type: 'image_url',
