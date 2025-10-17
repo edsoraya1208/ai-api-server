@@ -69,12 +69,10 @@ app.post('/detect-erd', async (req, res) => {
               type: 'text',
               text: `Analyze this ERD diagram. Return ONLY valid JSON.
 
-STEP 1 - CHECK IF BASIC ERD:
-❌ REJECT if diagram has (return {"isERD": false, "reason": "..."}):
-- EERD elements like ISA/Inheritance etc
-- Aggregation (relationship within relationship)
-- Crow's Foot notation (lines with crow feet symbols >< or |<)
-- Not a database diagram at all
+STEP 1 - REJECT SCHEME (OUT OF SCOPE):
+- If you see: (d) symbols, triangle shapes, subclass/superclass hierarchies, specialization/generalization, or lines branching to multiple entity types from one parent entity → Return {"isERD": false, "reason": "This is an EERD with subclass/specialization. Only basic ERD supported."}
+- If Crow's Foot notation (>< |< symbols) → Return {"isERD": false, "reason": "Crow's Foot notation detected. Only Chen's notation supported."}
+- If not a database diagram → Return {"isERD": false, "reason": "This is not an ERD"}
 
 SCOPE - WE DETECT:
 ✅ Strong/Weak Entities
