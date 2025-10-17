@@ -69,7 +69,7 @@ app.post('/detect-erd', async (req, res) => {
               type: 'text',
               text: `Analyze this ERD diagram. Return ONLY valid JSON.
 
-STEP 1 - REJECT SCHEME:
+STEP 1 - COMPLETELY REJECT THE WHOLE SCHEME SCHEME:
 - If you see: (d) symbols, triangle shapes, subclass/superclass hierarchies, specialization/generalization, or lines branching to multiple entity types from one parent entity → Return {"isERD": false, "reason": "This is an EERD with subclass/specialization. Only basic ERD supported."}
 - If Crow's Foot notation (>< |< symbols) → Return {"isERD": false, "reason": "Crow's Foot notation detected. Only Chen's notation supported."}
 - If not a database diagram → Return {"isERD": false, "reason": "This is not an ERD"}
@@ -100,7 +100,7 @@ CRITICAL RULES:
 - Relationships MUST have "from" and "to" (entity names)
 - Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
 - confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
-- If you find ISA/inheritance, mark as type: "other", subType: "isa_relationship"
+- TRY TO NOT MAKE MISTAKE/MISDETECT ANY ELEMENT PRESENT
 - Return ONLY JSON, no markdown, no extra text`
 
 
