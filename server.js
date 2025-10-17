@@ -103,11 +103,11 @@ CRITICAL RULES:
 
 CONFIDENCE RULES:
 - Assign realistic scores (70-95), NOT all 100
+- naming convention can be a hint, but visual cues matter more
 - DO NOT hallucinate or assume based on naming conventions alone
 - Only detect what is VISUALLY PRESENT in the diagram notation
-- Only mark as primary_key if UNDERLINED in drawing, not just by name
-- Only mark weak entity if DOUBLE borders shown, not assumed
-- Lower confidence (65-80) if notation unclear`
+- Only mark as primary_key if UNDERLINED in drawing, not just by name, but name can be a hitn whether it's primary key or not
+- Only mark weak entity if DOUBLE borders shown, not assumed only by name`
             },
             {
               type: 'image_url',
