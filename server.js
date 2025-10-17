@@ -69,16 +69,19 @@ app.post('/detect-erd', async (req, res) => {
               type: 'text',
               text: `Analyze this ERD diagram. Return ONLY valid JSON.
 
-STEP 1 - REJECT SCHEME (OUT OF SCOPE):
-- If you see: (d) symbols, triangle shapes, subclass/superclass hierarchies, specialization/generalization, or lines branching to multiple entity types from one parent entity → Return {"isERD": false, "reason": "This is an EERD with subclass/specialization. Only basic ERD supported."}
-- If Crow's Foot notation (>< |< symbols) → Return {"isERD": false, "reason": "Crow's Foot notation detected. Only Chen's notation supported."}
-- If not a database diagram → Return {"isERD": false, "reason": "This is not an ERD"}
-
 SCOPE - WE DETECT:
 ✅ Strong/Weak Entities
 ✅ Relationships (1:1, 1:N, M:N)
 ✅ Attributes belonging to: Entities, Relationships, or other Attributes (composite)
 ✅ Primary Key, Foreign Key, Regular, Derived, Multivalued, Composite attributes
+
+❌ OUT OF SCOPE (mark as "other" if found):
+- ISA/Inheritance relationships
+- Aggregation
+- Ternary relationships (3+ entities)
+- Participation constraints
+
+IF NOT AN ERD: {"isERD": false, "reason": "describe what it is"}
 
 IF IS AN ERD: 
 {
@@ -99,15 +102,9 @@ CRITICAL RULES:
 - Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
 - Relationships MUST have "from" and "to" (entity names)
 - Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
-- Return ONLY JSON, no markdown, no extra text
-
-CONFIDENCE RULES:
-- Assign realistic scores (70-95), NOT all 100
-- naming convention can be a hint, but visual cues matter more
-- DO NOT hallucinate or assume based on naming conventions alone
-- Only detect what is VISUALLY PRESENT in the diagram notation
-- Only mark as primary_key if UNDERLINED in drawing, not just by name, but name can be a hitn whether it's primary key or not
-- Only mark weak entity if DOUBLE borders shown, not assumed only by name`
+- confidence: 0-100 (your certainty level)
+- If you find ISA/inheritance, mark as type: "other", subType: "isa_relationship"
+- Return ONLY JSON, no markdown, no extra text`
             },
             {
               type: 'image_url',
