@@ -254,3 +254,137 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
+app.post('/autograde-erd', async (req, res) => {
+  try {
+    const { studentElements, correctAnswer, rubricStructured } = req.body;
+
+    // Validate inputs
+    if (!studentElements || !correctAnswer || !correctAnswer.elements) {
+      return res.status(400).json({ 
+        error: 'Missing required data',
+        message: 'Need studentElements, correctAnswer, and rubricStructured'
+      });
+    }
+
+    console.log('🎓 Auto-grading submission...');
+    console.log('  - Student elements:', studentElements.length);
+    console.log('  - Correct elements:', correctAnswer.elements.length);
+    console.log('  - Has rubric:', !!rubricStructured);
+
+    // Build comprehensive comparison prompt
+    const prompt = `You are an ERD grading assistant. Compare the student's ERD with the correct answer and provide detailed grading.
+
+**CORRECT ANSWER (What lecturer expects):**
+${JSON.stringify(correctAnswer.elements, null, 2)}
+
+**STUDENT'S SUBMISSION:**
+${JSON.stringify(studentElements, null, 2)}
+
+${rubricStructured ? `**GRADING RUBRIC:**
+Total Points: ${rubricStructured.totalPoints}
+Criteria:
+${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
+` : '**No rubric provided. Use standard ERD grading criteria.**'}
+
+**YOUR TASK:**
+1. Compare each element type: entities, relationships, attributes
+2. Identify: missing elements, extra elements, incorrect connections, wrong cardinality
+3. Calculate points based on rubric (if provided) or standard criteria
+4. Provide specific, actionable feedback
+
+**RETURN ONLY VALID JSON (no markdown):**
+{
+  "totalScore": 85,
+  "maxScore": ${rubricStructured?.totalPoints || 100},
+  "breakdown": [
+    {"category": "Entities", "earned": 25, "max": 30, "feedback": "Missing 'Course' entity"},
+    {"category": "Relationships", "earned": 28, "max": 30, "feedback": "Correct cardinality on all relationships"},
+    {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Missing primary key for 'Student'"}
+  ],
+  "feedback": {
+    "correct": [
+      "All entities properly identified",
+      "Relationship 'enrolls' correctly connects Student and Course"
+    ],
+    "missing": [
+      "Missing 'Department' entity",
+      "Missing 'teaches' relationship between Professor and Course"
+    ],
+    "incorrect": [
+      "Relationship 'takes' should be many-to-many, not one-to-many",
+      "Attribute 'email' should belong to Student, not Course"
+    ],
+    "warnings": [
+      "Weak entity 'Section' detected but no identifying relationship found"
+    ]
+  },
+  "overallComment": "Good structure overall. Main issues: missing Department entity and incorrect cardinality on 'takes' relationship."
+}
+
+**GRADING RULES:**
+- Be strict but fair
+- Penalize missing required elements heavily
+- Give partial credit for correct structure with minor errors
+- Extra elements are OK if they make sense (don't penalize)
+- Incorrect connections/cardinality are major errors
+`;
+
+    // Call OpenRouter AI
+    const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout:free',
+        messages: [{
+          role: 'user',
+          content: prompt
+        }],
+        temperature: 0.2, // Lower temp for consistent grading
+        max_tokens: 3000
+      })
+    });
+
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      throw new Error(`OpenRouter failed: ${aiResponse.statusText} - ${errorText}`);
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices[0].message.content;
+
+    // Clean markdown if present
+    const cleanContent = content
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    let result;
+    try {
+      result = JSON.parse(cleanContent);
+    } catch (parseError) {
+      console.error('❌ JSON Parse Error:', parseError.message);
+      console.error('Content:', cleanContent);
+      throw new Error('AI returned invalid JSON format');
+    }
+
+    // Validate result structure
+    if (!result.totalScore || !result.breakdown || !result.feedback) {
+      throw new Error('AI response missing required fields');
+    }
+
+    console.log('✅ Auto-grading complete:', result.totalScore, '/', result.maxScore);
+    return res.status(200).json(result);
+
+  } catch (error) {
+    console.error('❌ Auto-grading error:', error);
+    
+    return res.status(500).json({ 
+      error: 'Auto-grading failed',
+      message: error.message
+    });
+  }
+})
