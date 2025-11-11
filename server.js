@@ -6,19 +6,14 @@ dotenv.config();
 
 const app = express();
 
-// ✅ FIXED: Proper CORS configuration for preflight requests
+// Allow requests from your Vercel app
 app.use(cors({
   origin: [
     'http://localhost:5173',
     'https://erducate.vercel.app'
   ],
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'], // ← ADDED: Explicitly allow OPTIONS
-  allowedHeaders: ['Content-Type', 'Authorization'] // ← ADDED: Allow headers
+  credentials: true
 }));
-
-// ✅ ADDED: Handle preflight requests explicitly
-app.options('*', cors());
 
 app.use(express.json({ limit: '50mb' }));
 
@@ -107,6 +102,8 @@ CRITICAL RULES:
 - confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
 - do not misdetect anything especially attribute, must detect all present
 - Return ONLY JSON, no markdown, no extra text`
+
+
             },
             {
               type: 'image_url',
@@ -161,7 +158,7 @@ CRITICAL RULES:
   }
 });
 
-// Rubric analysis endpoint
+// 🆕 Rubric analysis endpoint - NOW ACCEPTS TEXT INSTEAD OF FILE
 app.post('/detect-rubric', async (req, res) => {
   try {
     const { rubricText } = req.body;
@@ -169,7 +166,7 @@ app.post('/detect-rubric', async (req, res) => {
       return res.status(400).json({ error: 'Missing rubricText' });
     }
     console.log('🔍 Analyzing rubric text:', rubricText.substring(0, 100) + '...');
-    
+    // Call OpenRouter AI with text-only prompt
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -208,28 +205,25 @@ CRITICAL RULES:
         max_tokens: 2000
       })
     });
-    
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error('OpenRouter error:', errorText);
       throw new Error(`OpenRouter failed: ${aiResponse.statusText}`);
     }
-    
     const aiData = await aiResponse.json();
-    
+    // Validate AI response structure
     if (!aiData.choices || !aiData.choices[0] || !aiData.choices[0].message) {
       console.error('Invalid AI response structure:', JSON.stringify(aiData, null, 2));
       throw new Error('AI returned invalid response structure');
     }
-    
     const content = aiData.choices[0].message.content;
-    console.log('Raw AI response:', content.substring(0, 200) + '...');
-    
+    console.log('Raw AI response:', content.substring(0, 200) + '...'); // Log first 200 chars
+    // Clean markdown if present
     const cleanContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
       .trim();
-    
+    // Parse JSON with error handling
     let result;
     try {
       result = JSON.parse(cleanContent);
@@ -238,14 +232,12 @@ CRITICAL RULES:
       console.error('Content that failed:', cleanContent);
       throw new Error('AI returned invalid JSON format');
     }
-    
+    // Validate result structure
     if (!result || typeof result !== 'object') {
       throw new Error('AI response is not a valid object');
     }
-    
     console.log('✅ Rubric analysis complete');
     return res.status(200).json(result);
-    
   } catch (error) {
     console.error('❌ Error:', error);
     
@@ -257,11 +249,17 @@ CRITICAL RULES:
   }
 });
 
-// Auto-grading endpoint
+// Bind to 0.0.0.0 for Render compatibility
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
+
 app.post('/autograde-erd', async (req, res) => {
   try {
     const { studentElements, correctAnswer, rubricStructured } = req.body;
 
+    // Validate inputs
     if (!studentElements || !correctAnswer || !correctAnswer.elements) {
       return res.status(400).json({ 
         error: 'Missing required data',
@@ -274,6 +272,7 @@ app.post('/autograde-erd', async (req, res) => {
     console.log('  - Correct elements:', correctAnswer.elements.length);
     console.log('  - Has rubric:', !!rubricStructured);
 
+    // Build comprehensive comparison prompt
     const prompt = `You are an ERD grading assistant. Compare the student's ERD with the correct answer and provide detailed grading.
 
 **CORRECT ANSWER (What lecturer expects):**
@@ -331,6 +330,7 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 - Incorrect connections/cardinality are major errors
 `;
 
+    // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -343,7 +343,7 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
           role: 'user',
           content: prompt
         }],
-        temperature: 0.2,
+        temperature: 0.2, // Lower temp for consistent grading
         max_tokens: 3000
       })
     });
@@ -356,6 +356,7 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
     const aiData = await aiResponse.json();
     const content = aiData.choices[0].message.content;
 
+    // Clean markdown if present
     const cleanContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
@@ -370,6 +371,7 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
       throw new Error('AI returned invalid JSON format');
     }
 
+    // Validate result structure
     if (!result.totalScore || !result.breakdown || !result.feedback) {
       throw new Error('AI response missing required fields');
     }
@@ -385,10 +387,4 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
       message: error.message
     });
   }
-});
-
-// Bind to 0.0.0.0 for Render compatibility
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+})
