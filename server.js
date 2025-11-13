@@ -298,36 +298,27 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
   "totalScore": 85,
   "maxScore": ${rubricStructured?.totalPoints || 100},
   "breakdown": [
-    {"category": "Entities", "earned": 25, "max": 30, "feedback": "Missing 'Course' entity"},
-    {"category": "Relationships", "earned": 28, "max": 30, "feedback": "Correct cardinality on all relationships"},
-    {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Missing primary key for 'Student'"}
+    {"category": "Entities", "earned": 25, "max": 30, "feedback": "You correctly identified Student, Course, and Professor entities. However, you are missing the Department entity which is needed to organize professors by their departments."},
+    {"category": "Relationships", "earned": 20, "max": 30, "feedback": "The Enrolls relationship between Student and Course is correct with many-to-many cardinality. However, the Advises relationship should be one-to-many (one professor advises multiple students) but you set it as one-to-one. You are also missing the Teaches relationship between Professor and Course."},
+    {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Most attributes are placed correctly. However, the email attribute belongs to the Student entity, not the Course entity. Without this correction, you cannot store student contact information properly. Also missing primary key designation for StudentID in the Student entity."}
   ],
   "feedback": {
     "correct": [
-      "All entities properly identified",
-      "Relationship 'enrolls' correctly connects Student and Course"
+      "All three main entities (Student, Course, Professor) are correctly identified",
+      "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses and courses to have multiple students"
     ],
     "missing": [
-      "Missing 'Department' entity",
-      "Missing 'teaches' relationship between Professor and Course"
+      "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
+      "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
     ],
     "incorrect": [
-      "Relationship 'takes' should be many-to-many, not one-to-many",
-      "Attribute 'email' should belong to Student, not Course"
-    ],
-    "warnings": [
-      "Weak entity 'Section' detected but no identifying relationship found"
+      "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
+      "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
     ]
   },
-  "overallComment": "Good structure overall. Main issues: missing Department entity and incorrect cardinality on 'takes' relationship."
+  "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
 }
 
-**GRADING RULES:**
-- Be strict but fair
-- Penalize missing required elements heavily
-- Give partial credit for correct structure with minor errors
-- Extra elements are OK if they make sense (don't penalize)
-- Incorrect connections/cardinality are major errors
 `;
 
     // Call OpenRouter AI
