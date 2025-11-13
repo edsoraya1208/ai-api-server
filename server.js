@@ -318,6 +318,9 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
   },
   "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
 }
+  GRADING RULES: 
+  1. BE STRICT AND FAIR
+  2. you are talking to the student, use proper pronouns
 
 `;
 
