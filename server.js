@@ -255,6 +255,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
+// 🆕 Auto-grading endpoint
 app.post('/autograde-erd', async (req, res) => {
   try {
     const { studentElements, correctAnswer, rubricStructured } = req.body;
@@ -273,16 +274,18 @@ app.post('/autograde-erd', async (req, res) => {
     console.log('  - Has rubric:', !!rubricStructured);
 
     // Build comprehensive comparison prompt
-    const prompt = `You are an ERD grading assistant. 
+    const prompt = `You are a STRICT ERD grading assistant.
 
 **GRADING INSTRUCTIONS:**
 1. Compare ONLY the detected elements from student submission vs correct answer scheme
 2. STRICTLY follow the rubric criteria and point allocations
 3. Award points based on rubric categories - do NOT make up your own scoring
+4. Grade based on what's DETECTED in the elements arrays, not assumptions
 
 **CRITICAL VALIDATION - CHECK FIRST:**
 ⚠️ If the student's ERD is a COMPLETELY DIFFERENT DOMAIN from the correct answer (e.g., University vs Hospital vs Business), award 0 points immediately.
 Example: Correct answer has "Student, Course, Professor" but student submitted "Patient, Doctor, Hospital" → Score: 0/100, feedback: "Your ERD is for a completely different domain. This assignment requires a University ERD, but you submitted a Hospital ERD."
+
 **CORRECT ANSWER (What lecturer expects):**
 ${JSON.stringify(correctAnswer.elements, null, 2)}
 
@@ -301,7 +304,9 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 3. Calculate points based on rubric (if provided) or standard criteria
 4. Provide specific, actionable feedback
 
-**RETURN ONLY VALID JSON (no markdown):**
+**RETURN FORMAT:**
+Return ONLY valid JSON, no markdown code blocks, no extra text.
+
 {
   "totalScore": 85,
   "maxScore": ${rubricStructured?.totalPoints || 100},
@@ -326,6 +331,7 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
   },
   "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
 }
+
 **CRITICAL RULES:**
 - Return ONLY valid JSON, no markdown code blocks
 - Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
@@ -333,8 +339,8 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 - feedback object MUST have: correct (array), missing (array), incorrect (array)
 - If any section is empty, use empty array [] not null
 - Do not add any text before or after the JSON
-- you are giving feedback to students
-
+- BE STRICT AND FAIR
+- You are talking to the student, use proper pronouns
 `;
 
     // Call OpenRouter AI
@@ -369,17 +375,34 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
       .replace(/```\n?/g, '')
       .trim();
 
+    // 🔍 DEBUG LOGGING - See what AI actually returned
+    console.log('📊 Raw AI response (first 500 chars):', cleanContent.substring(0, 500));
+
     let result;
     try {
       result = JSON.parse(cleanContent);
+      
+      // 🔍 DEBUG LOGGING - See parsed structure
+      console.log('📊 Parsed structure:', JSON.stringify(result, null, 2));
+      console.log('  - Has totalScore?', typeof result.totalScore, '=', result.totalScore);
+      console.log('  - Has breakdown?', Array.isArray(result.breakdown), '=', result.breakdown?.length);
+      console.log('  - Has feedback?', typeof result.feedback, '=', Object.keys(result.feedback || {}).length);
+      
     } catch (parseError) {
       console.error('❌ JSON Parse Error:', parseError.message);
-      console.error('Content:', cleanContent);
+      console.error('Content that failed to parse:', cleanContent);
       throw new Error('AI returned invalid JSON format');
     }
 
-    // Validate result structure
-    if (!result.totalScore || !result.breakdown || !result.feedback) {
+    // Validate result structure (improved validation)
+    if (typeof result.totalScore === 'undefined' || 
+        !Array.isArray(result.breakdown) || 
+        typeof result.feedback !== 'object') {
+      console.error('❌ Validation failed. Missing fields:', {
+        hasTotalScore: typeof result.totalScore !== 'undefined',
+        hasBreakdown: Array.isArray(result.breakdown),
+        hasFeedback: typeof result.feedback === 'object'
+      });
       throw new Error('AI response missing required fields');
     }
 
@@ -394,4 +417,4 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
       message: error.message
     });
   }
-})
+});
