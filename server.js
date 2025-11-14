@@ -273,8 +273,16 @@ app.post('/autograde-erd', async (req, res) => {
     console.log('  - Has rubric:', !!rubricStructured);
 
     // Build comprehensive comparison prompt
-    const prompt = `You are an ERD grading assistant. Compare the student's ERD with the correct answer and provide detailed grading.
+    const prompt = `You are an ERD grading assistant. 
 
+**GRADING INSTRUCTIONS:**
+1. Compare ONLY the detected elements from student submission vs correct answer scheme
+2. STRICTLY follow the rubric criteria and point allocations
+3. Award points based on rubric categories - do NOT make up your own scoring
+
+**CRITICAL VALIDATION - CHECK FIRST:**
+⚠️ If the student's ERD is a COMPLETELY DIFFERENT DOMAIN from the correct answer (e.g., University vs Hospital vs Business), award 0 points immediately.
+Example: Correct answer has "Student, Course, Professor" but student submitted "Patient, Doctor, Hospital" → Score: 0/100, feedback: "Your ERD is for a completely different domain. This assignment requires a University ERD, but you submitted a Hospital ERD."
 **CORRECT ANSWER (What lecturer expects):**
 ${JSON.stringify(correctAnswer.elements, null, 2)}
 
@@ -318,9 +326,14 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
   },
   "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
 }
-  GRADING RULES: 
-  1. BE STRICT AND FAIR
-  2. you are talking to the student, use proper pronouns
+**CRITICAL RULES:**
+- Return ONLY valid JSON, no markdown code blocks
+- Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
+- breakdown array MUST have objects with: category, earned, max, feedback
+- feedback object MUST have: correct (array), missing (array), incorrect (array)
+- If any section is empty, use empty array [] not null
+- Do not add any text before or after the JSON
+- you are giving feedback to students
 
 `;
 
