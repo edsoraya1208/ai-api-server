@@ -61,7 +61,7 @@ app.post('/detect-erd', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview-09-2025',
+        model: 'openai/gpt-oss-20b:free',
         messages: [{
           role: 'user',
           content: [
@@ -174,7 +174,7 @@ app.post('/detect-rubric', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview-09-2025',
+        model: 'openai/gpt-oss-20b:free',
         messages: [{
           role: 'user',
           content: `Analyze this grading rubric text. Return ONLY valid JSON with no markdown formatting.
@@ -351,7 +351,7 @@ Return ONLY valid JSON, no markdown code blocks, no extra text.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview-09-2025',
+        model: 'openai/gpt-oss-20b:free',
         messages: [{
           role: 'user',
           content: prompt
