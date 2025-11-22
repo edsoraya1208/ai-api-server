@@ -99,11 +99,10 @@ CRITICAL RULES FOR RELATIONSHIPS:
   * "one-to-one" means: both sides = ONE (1)
 - Example: If Professor teaches many Courses (1:N), then from="Professor", to="Course", subType="one-to-many"
 - Example: If you detect Course to Professor with N:1, that's still "one-to-many" but from="Professor", to="Course" (flip it to match)
-- Minimum cardinality fields (minFrom, maxFrom, minTo, maxTo) are OPTIONAL:
-  * Only include if diagram clearly shows minimum cardinality (like (0,1), (1,N), etc)
-  * minFrom/minTo can be: "0", "1", or "N"
-  * maxFrom/maxTo can be: "1" or "N"
-  * If diagram doesn't show min cardinality, DO NOT include these fields
+- Optional cardinality fields (cardinalityFrom, cardinalityTo):
+  * Only include if diagram clearly shows min:max notation like (0,1), (1,N), etc.
+  * Format: "0..1", "1..1", "0..N", "1..N"
+  * If diagram doesn't show detailed cardinality, DO NOT include these fields
 
 CRITICAL RULES FOR OTHER ELEMENTS:
 - Each element MUST have unique "id" (e.g., "el_1", "el_2", etc.)
