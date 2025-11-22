@@ -76,7 +76,7 @@ STEP 1 - COMPLETELY REJECT THE WHOLE SCHEME:
 
 SCOPE - WE DETECT:
 ✅ Strong/Weak Entities
-✅ Relationships (1:1, 1:N, M:N) with optional minimum cardinality
+✅ Relationships (1:1, 1:N, M:N)
 ✅ Attributes belonging to: Entities, Relationships, or other Attributes (composite)
 ✅ Primary Key, Foreign Key, Regular, Derived, Multivalued, Composite attributes
 
@@ -85,32 +85,26 @@ IF IS AN ERD:
   "isERD": true,
   "elements": [
     {"id": "el_1", "name": "Student", "type": "entity", "subType": "strong", "confidence": 95},
-    {"id": "el_2", "name": "Teaches", "type": "relationship", "subType": "one-to-many", "from": "Professor", "to": "Course", "cardinalityFrom": "1..1", "cardinalityTo": "0..N", "confidence": 88},
-{"id": "el_3", "name": "Enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 90},
-    {"id": "el_4", "name": "StudentID", "type": "attribute", "subType": "primary_key", "belongsTo": "Student", "belongsToType": "entity", "confidence": 92}
+    {"id": "el_2", "name": "enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 88},
+    {"id": "el_3", "name": "visit", "type": "relationship", "subType": "one-to-many", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..N", "cardinalityTo": "1..1", "confidence": 87},
+    {"id": "el_4", "name": "StudentID", "type": "attribute", "subType": "primary_key", "belongsTo": "Student", "belongsToType": "entity", "confidence": 92},
+    {"id": "el_5", "name": "enrollment_date", "type": "attribute", "subType": "regular", "belongsTo": "enrolls", "belongsToType": "relationship", "confidence": 85}
   ]
 }
 
-CRITICAL RULES FOR RELATIONSHIPS:
-- subType MUST be: "one-to-one", "one-to-many", or "many-to-many"
-- "from" and "to" MUST MATCH the subType direction:
-  * "one-to-many" means: from side = ONE (1), to side = MANY (N)
-  * "many-to-many" means: both sides = MANY (M, N)
-  * "one-to-one" means: both sides = ONE (1)
-- Example: If Professor teaches many Courses (1:N), then from="Professor", to="Course", subType="one-to-many"
-- Example: If you detect Course to Professor with N:1, that's still "one-to-many" but from="Professor", to="Course" (flip it to match)
-- Optional cardinality fields (cardinalityFrom, cardinalityTo):
-  * Only include if diagram clearly shows min:max notation like (0,1), (1,N), etc.
-  * Format: "0..1", "1..1", "0..N", "1..N"
-  * If diagram doesn't show detailed cardinality, DO NOT include these fields
-
-CRITICAL RULES FOR OTHER ELEMENTS:
+CRITICAL RULES:
 - Each element MUST have unique "id" (e.g., "el_1", "el_2", etc.)
 - Entity subTypes: "strong", "weak"
+- Relationship subTypes: "one-to-one", "one-to-many", "many-to-many"
+- Relationships MUST have "from" and "to" (entity names)
+- For "one-to-many": from entity is the ONE side, to entity is the MANY side
 - Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
 - Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
+- OPTIONAL: If diagram shows (min,max) notation like (0,N) or (1,1) near entities, add "cardinalityFrom" and "cardinalityTo" fields
+- Cardinality format: "0..1" (optional, at most one), "1..1" (exactly one), "0..N" (optional, many), "1..N" (at least one, many)
+- When reading cardinality: the numbers near an entity show that entity's participation (e.g., if "0,N" is near Patient, then Patient side is "0..N")
 - confidence: 0-100 (your certainty level) must be realistic, cannot all be 100 or all same confidence
-- Do not misdetect anything, especially attributes - must detect all present
+- Do not misdetect anything especially attributes, must detect all present including primary keys
 - Return ONLY JSON, no markdown, no extra text`
 
 
