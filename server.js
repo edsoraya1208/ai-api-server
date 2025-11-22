@@ -61,7 +61,7 @@ app.post('/detect-erd', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
+        model: 'meta-llama/llama-4-scout',
         messages: [{
           role: 'user',
           content: [
@@ -69,14 +69,14 @@ app.post('/detect-erd', async (req, res) => {
               type: 'text',
               text: `Analyze this ERD diagram. Return ONLY valid JSON.
 
-STEP 1 - COMPLETELY REJECT THE WHOLE SCHEME SCHEME:
+STEP 1 - COMPLETELY REJECT THE WHOLE SCHEME:
 - If you see: (d) symbols, triangle shapes, subclass/superclass hierarchies, specialization/generalization, or lines branching to multiple entity types from one parent entity → Return {"isERD": false, "reason": "This is an EERD with subclass/specialization. Only basic ERD supported."}
 - If Crow's Foot notation (>< |< symbols) → Return {"isERD": false, "reason": "Crow's Foot notation detected. Only Chen's notation supported."}
 - If not a database diagram → Return {"isERD": false, "reason": "This is not an ERD"}
 
 SCOPE - WE DETECT:
 ✅ Strong/Weak Entities
-✅ Relationships (1:1, 1:N, M:N)
+✅ Relationships (1:1, 1:N, M:N) with optional minimum cardinality
 ✅ Attributes belonging to: Entities, Relationships, or other Attributes (composite)
 ✅ Primary Key, Foreign Key, Regular, Derived, Multivalued, Composite attributes
 
@@ -85,22 +85,33 @@ IF IS AN ERD:
   "isERD": true,
   "elements": [
     {"id": "el_1", "name": "Student", "type": "entity", "subType": "strong", "confidence": 95},
-    {"id": "el_2", "name": "enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 88},
-    {"id": "el_3", "name": "StudentID", "type": "attribute", "subType": "primary_key", "belongsTo": "Student", "belongsToType": "entity", "confidence": 92},
-    {"id": "el_4", "name": "enrollment_date", "type": "attribute", "subType": "regular", "belongsTo": "enrolls", "belongsToType": "relationship", "confidence": 85},
-    {"id": "el_5", "name": "Street", "type": "attribute", "subType": "composite", "belongsTo": "Address", "belongsToType": "attribute", "confidence": 90}
+    {"id": "el_2", "name": "Teaches", "type": "relationship", "subType": "one-to-many", "from": "Professor", "to": "Course", "minFrom": "1", "maxFrom": "1", "minTo": "0", "maxTo": "N", "confidence": 88},
+    {"id": "el_3", "name": "Enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 90},
+    {"id": "el_4", "name": "StudentID", "type": "attribute", "subType": "primary_key", "belongsTo": "Student", "belongsToType": "entity", "confidence": 92}
   ]
 }
 
-CRITICAL RULES:
+CRITICAL RULES FOR RELATIONSHIPS:
+- subType MUST be: "one-to-one", "one-to-many", or "many-to-many"
+- "from" and "to" MUST MATCH the subType direction:
+  * "one-to-many" means: from side = ONE (1), to side = MANY (N)
+  * "many-to-many" means: both sides = MANY (M, N)
+  * "one-to-one" means: both sides = ONE (1)
+- Example: If Professor teaches many Courses (1:N), then from="Professor", to="Course", subType="one-to-many"
+- Example: If you detect Course to Professor with N:1, that's still "one-to-many" but from="Professor", to="Course" (flip it to match)
+- Minimum cardinality fields (minFrom, maxFrom, minTo, maxTo) are OPTIONAL:
+  * Only include if diagram clearly shows minimum cardinality (like (0,1), (1,N), etc)
+  * minFrom/minTo can be: "0", "1", or "N"
+  * maxFrom/maxTo can be: "1" or "N"
+  * If diagram doesn't show min cardinality, DO NOT include these fields
+
+CRITICAL RULES FOR OTHER ELEMENTS:
 - Each element MUST have unique "id" (e.g., "el_1", "el_2", etc.)
 - Entity subTypes: "strong", "weak"
-- Relationship subTypes: "one-to-one", "one-to-many", "many-to-many"
 - Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
-- Relationships MUST have "from" and "to" (entity names)
 - Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
-- confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
-- do not misdetect anything especially attribute, must detect all present
+- confidence: 0-100 (your certainty level) must be realistic, cannot all be 100 or all same confidence
+- Do not misdetect anything, especially attributes - must detect all present
 - Return ONLY JSON, no markdown, no extra text`
 
 
@@ -174,7 +185,7 @@ app.post('/detect-rubric', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
+        model: 'meta-llama/llama-4-scout',
         messages: [{
           role: 'user',
           content: `Analyze this grading rubric text. Return ONLY valid JSON with no markdown formatting.
@@ -351,7 +362,7 @@ Return ONLY valid JSON, no markdown code blocks, no extra text.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
+        model: 'meta-llama/llama-4-scout',
         messages: [{
           role: 'user',
           content: prompt
