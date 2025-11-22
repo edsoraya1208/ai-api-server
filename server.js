@@ -85,8 +85,8 @@ IF IS AN ERD:
   "isERD": true,
   "elements": [
     {"id": "el_1", "name": "Student", "type": "entity", "subType": "strong", "confidence": 95},
-    {"id": "el_2", "name": "Teaches", "type": "relationship", "subType": "one-to-many", "from": "Professor", "to": "Course", "minFrom": "1", "maxFrom": "1", "minTo": "0", "maxTo": "N", "confidence": 88},
-    {"id": "el_3", "name": "Enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 90},
+    {"id": "el_2", "name": "Teaches", "type": "relationship", "subType": "one-to-many", "from": "Professor", "to": "Course", "cardinalityFrom": "1..1", "cardinalityTo": "0..N", "confidence": 88},
+{"id": "el_3", "name": "Enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 90},
     {"id": "el_4", "name": "StudentID", "type": "attribute", "subType": "primary_key", "belongsTo": "Student", "belongsToType": "entity", "confidence": 92}
   ]
 }
