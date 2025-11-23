@@ -85,8 +85,8 @@ RESPONSE FORMAT:
   "isERD": true,
   "elements": [
     {"id": "el_1", "name": "Patient", "type": "entity", "subType": "strong", "confidence": 95},
-    {"id": "el_2", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..N", "cardinalityTo": "1..1", "confidence": 88},
-    {"id": "el_3", "name": "has", "type": "relationship", "subType": "weak", "from": "Employee", "to": "Dependent", "cardinalityFrom": "1..1", "cardinalityTo": "0..N", "confidence": 87},
+    {"id": "el_2", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..M", "cardinalityTo": "1..1", "confidence": 88},
+    {"id": "el_3", "name": "has", "type": "relationship", "subType": "weak", "from": "Employee", "to": "Dependent", "cardinalityFrom": "1..1", "cardinalityTo": "0..M", "confidence": 87},
     {"id": "el_4", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
   ]
 }
@@ -97,19 +97,19 @@ CRITICAL RULES:
 3. Relationship subTypes: "strong" (regular diamond) or "weak" (double diamond)
 4. Relationships MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
 5. Read cardinality from numbers/letters near entities:
-   - (0,N) or M or 0..* near entity → "0..N"
-   - (1,N) or 1..* near entity → "1..N"
+   - (0,M) or M or 0..* near entity → "0..M"
+   - (1,M) or 1..* near entity → "1..M"
    - (0,1) or 0..1 near entity → "0..1"
    - (1,1) or just 1 near entity → "1..1"
-If ONLY max shown (just "N", "M", or "1" without min):
-     * Just "N" or "M" → assume min=0 → "0..N"
+   - If ONLY max shown (just "M" or "1" without min):
+     * Just "M" → assume min=0 → "0..M"
      * Just "1" → assume min=0 → "0..1"
 6. Cardinality meanings:
    - 0..1 = optional, at most one
    - 1..1 = mandatory, exactly one
-   - 0..N = optional, can be many
-   - 1..N = mandatory, at least one
-7. Direction: If Patient(0,N)─visit─(1,1)Doctor, then from="Patient", to="Doctor"
+   - 0..M = optional, can be many
+   - 1..M = mandatory, at least one
+7. Direction: If Patient(0,M)─visit─(1,1)Doctor, then from="Patient", to="Doctor"
 8. Attributes MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
 9. Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
 10. Primary keys are UNDERLINED - detect carefully
