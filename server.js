@@ -67,18 +67,39 @@ app.post('/detect-erd', async (req, res) => {
           content: [
             {
               type: 'text',
-              text: `Analyze this ERD diagram. Return ONLY valid JSON.
+              text: `Analyze this ERD diagram. Return ONLY valid JSON, no markdown.
+
+CRITICAL DETECTION RULES (MUST FOLLOW):
+1. PRIMARY KEYS are UNDERLINED text - detect ALL underlines carefully
+2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
+3. CARDINALITY must be read from BOTH sides of relationship:
+   - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
+   - OR look for M, 1, N letters near entities
+   - from="EntityA" to="EntityB" means: EntityA's cardinality goes in cardinalityFrom, EntityB's in cardinalityTo
+   - Example: Patient(0,M)─visit─(1,1)Doctor → from="Patient", cardinalityFrom="0..M", to="Doctor", cardinalityTo="1..1"
+
+CARDINALITY MAPPING:
+- (0,M) or M or 0..* → "0..M" (optional, many)
+- (1,M) or 1..* → "1..M" (mandatory, at least one)
+- (0,1) or 0..1 → "0..1" (optional, at most one)  
+- (1,1) or just 1 → "1..1" (mandatory, exactly one)
+- If only max shown: M→"0..M", 1→"0..1"
 
 REJECT IF:
 - EERD features: (d) symbols, triangles, subclass/superclass
-- Crow's Foot notation: >< |< symbols  
+- Crow's Foot notation: >< |< symbols
 - Not a database diagram
 
-DETECT:
-✅ Entities (strong/weak)
-✅ Relationships (strong/weak) with cardinality
-✅ Attributes (primary_key, foreign_key, regular, derived, multivalued, composite)
-✅ Attribute ownership (entity/relationship/attribute)
+DETECT ALL:
+✅ Entities (strong=single rectangle, weak=double rectangle)
+✅ Relationships (strong=single diamond, weak=double diamond) with cardinality from BOTH sides
+✅ Attributes with correct subTypes:
+   - primary_key: UNDERLINED text
+   - multivalued: DOUBLE circle/oval border
+   - derived: dashed circle/oval
+   - composite: attribute connected to sub-attributes
+   - foreign_key: key from another entity
+   - regular: normal single circle/oval
 
 RESPONSE FORMAT:
 {
@@ -86,37 +107,18 @@ RESPONSE FORMAT:
   "elements": [
     {"id": "el_1", "name": "Patient", "type": "entity", "subType": "strong", "confidence": 95},
     {"id": "el_2", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..M", "cardinalityTo": "1..1", "confidence": 88},
-    {"id": "el_3", "name": "has", "type": "relationship", "subType": "weak", "from": "Employee", "to": "Dependent", "cardinalityFrom": "1..1", "cardinalityTo": "0..M", "confidence": 87},
-    {"id": "el_4", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
+    {"id": "el_3", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
   ]
 }
 
-CRITICAL RULES:
-1. Each element needs unique "id" (el_1, el_2, etc.)
-2. Entity subTypes: "strong" or "weak"
-3. Relationship subTypes: "strong" (regular diamond) or "weak" (double diamond)
-4. Relationships MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
-5. Read cardinality from numbers/letters near entities:
-   - (0,M) or M or 0..* near entity → "0..M"
-   - (1,M) or 1..* near entity → "1..M"
-   - (0,1) or 0..1 near entity → "0..1"
-   - (1,1) or just 1 near entity → "1..1"
-   - If ONLY max shown (just "M" or "1" without min):
-     * Just "M" → assume min=0 → "0..M"
-     * Just "1" → assume min=0 → "0..1"
-6. Cardinality meanings:
-   - 0..1 = optional, at most one
-   - 1..1 = mandatory, exactly one
-   - 0..M = optional, can be many
-   - 1..M = mandatory, at least one
-7. Direction: If Patient(0,M)─visit─(1,1)Doctor, then from="Patient", to="Doctor"
-8. Attributes MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
-9. Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
-10. Primary keys are UNDERLINED - detect carefully
-11. confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
-12. do not misdetect anything especially attribute, must detect all present
-13. Return ONLY JSON, no markdown`
+REQUIRED FIELDS:
+- Each element: unique "id" (el_1, el_2...)
+- Entities: "subType" is "strong" or "weak"
+- Relationships: "subType" is "strong" or "weak", MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
+- Attributes: MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
+- confidence: 0-100, vary realistically (not all same number)
 
+Return ONLY the JSON object.`
             },
             {
               type: 'image_url',
