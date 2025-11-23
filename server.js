@@ -84,6 +84,7 @@ CARDINALITY MAPPING:
 - (0,1) or 0..1 → "0..1" (optional, at most one)  
 - (1,1) or just 1 → "1..1" (mandatory, exactly one)
 - If only max shown: M→"0..M", 1→"0..1"
+- ⚠️ Read CAREFULLY: "M 1" means min=1 max=M → "1..M", NOT "0..M"
 
 REJECT IF:
 - EERD features: (d) symbols, triangles, subclass/superclass
@@ -117,7 +118,8 @@ REQUIRED FIELDS:
 - Relationships: "subType" is "strong" or "weak", MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
 - Attributes: MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
 - Confidence: 95-100 crystal clear | 80-94 clear | 70-79 requires interpretation | 60-69 unclear/guessing | <60 very uncertain
-- If cardinality unclear OR attribute border unclear (single/double) → max confidence 75
+- Relationships: max confidence 88 (cardinality requires careful reading)
+- If cardinality OR attribute border unclear → max confidence 75
 
 Return ONLY the JSON object.`
             },
@@ -315,10 +317,14 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
 **YOUR TASK:**
-1. Compare each element type: entities, relationships, attributes
-2. Identify: missing elements, extra elements, incorrect connections, wrong cardinality
-3. Calculate points based on rubric (if provided) or standard criteria
-4. Provide specific, actionable feedback
+1. Compare STRICTLY: entities, relationships (including cardinality from BOTH sides), attributes
+2. For relationships: Check name, from/to entities, cardinalityFrom, cardinalityTo - ALL must match exactly
+3. Calculate points: Deduct for EACH mismatch (wrong cardinality = points deducted from that category)
+4. Provide feedback using element NAMES only (never mention el_1, el_2, etc.)
+
+**CARDINALITY GRADING:**
+- If student's cardinality differs from correct answer (e.g., "0..M" vs "1..M"), deduct points from the Cardinality category
+- Example: Correct="1..M", Student="0..M" → Wrong minimum cardinality, deduct points
 
 **RETURN FORMAT:**
 Return ONLY valid JSON, no markdown code blocks, no extra text.
