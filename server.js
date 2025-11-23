@@ -317,14 +317,20 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
 **YOUR TASK:**
-1. Compare STRICTLY: entities, relationships (including cardinality from BOTH sides), attributes
-2. For relationships: Check name, from/to entities, cardinalityFrom, cardinalityTo - ALL must match exactly
-3. Calculate points: Deduct for EACH mismatch (wrong cardinality = points deducted from that category)
-4. Provide feedback using element NAMES only (never mention el_1, el_2, etc.)
+1. Compare student vs correct answer element by element
+2. Follow rubric point allocation STRICTLY - award points per category based on matches
+3. Deduct from category points when elements differ (e.g., wrong cardinality → deduct from Cardinality points)
+4. Provide feedback using element NAMES only (never mention el_1, el_2, etc.), to STUDENTS, not self corrections.
 
 **CARDINALITY GRADING:**
 - If student's cardinality differs from correct answer (e.g., "0..M" vs "1..M"), deduct points from the Cardinality category
 - Example: Correct="1..M", Student="0..M" → Wrong minimum cardinality, deduct points
+
+**FEEDBACK TONE:**
+- Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
+- Be concise, no self-corrections or recalculations in the feedback text
+- If everything is perfect, just say: "Excellent work! All elements are correct."
+- Do NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
 
 **RETURN FORMAT:**
 Return ONLY valid JSON, no markdown code blocks, no extra text.
