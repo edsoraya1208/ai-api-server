@@ -69,44 +69,53 @@ app.post('/detect-erd', async (req, res) => {
               type: 'text',
               text: `Analyze this ERD diagram. Return ONLY valid JSON.
 
-STEP 1 - COMPLETELY REJECT THE WHOLE SCHEME:
-- If you see: (d) symbols, triangle shapes, subclass/superclass hierarchies, specialization/generalization, or lines branching to multiple entity types from one parent entity → Return {"isERD": false, "reason": "This is an EERD with subclass/specialization. Only basic ERD supported."}
-- If Crow's Foot notation (>< |< symbols) → Return {"isERD": false, "reason": "Crow's Foot notation detected. Only Chen's notation supported."}
-- If not a database diagram → Return {"isERD": false, "reason": "This is not an ERD"}
+REJECT IF:
+- EERD features: (d) symbols, triangles, subclass/superclass
+- Crow's Foot notation: >< |< symbols  
+- Not a database diagram
 
-SCOPE - WE DETECT:
-✅ Strong/Weak Entities
-✅ Relationships (1:1, 1:N, M:N)
-✅ Attributes belonging to: Entities, Relationships, or other Attributes (composite)
-✅ Primary Key, Foreign Key, Regular, Derived, Multivalued, Composite attributes
+DETECT:
+✅ Entities (strong/weak)
+✅ Relationships (strong/weak) with cardinality
+✅ Attributes (primary_key, foreign_key, regular, derived, multivalued, composite)
+✅ Attribute ownership (entity/relationship/attribute)
 
-IF IS AN ERD: 
+RESPONSE FORMAT:
 {
   "isERD": true,
   "elements": [
-    {"id": "el_1", "name": "Student", "type": "entity", "subType": "strong", "confidence": 95},
-    {"id": "el_2", "name": "enrolls", "type": "relationship", "subType": "many-to-many", "from": "Student", "to": "Course", "confidence": 88},
-    {"id": "el_3", "name": "visit", "type": "relationship", "subType": "one-to-many", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..N", "cardinalityTo": "1..1", "confidence": 87},
-    {"id": "el_4", "name": "StudentID", "type": "attribute", "subType": "primary_key", "belongsTo": "Student", "belongsToType": "entity", "confidence": 92},
-    {"id": "el_5", "name": "enrollment_date", "type": "attribute", "subType": "regular", "belongsTo": "enrolls", "belongsToType": "relationship", "confidence": 85}
+    {"id": "el_1", "name": "Patient", "type": "entity", "subType": "strong", "confidence": 95},
+    {"id": "el_2", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..N", "cardinalityTo": "1..1", "confidence": 88},
+    {"id": "el_3", "name": "has", "type": "relationship", "subType": "weak", "from": "Employee", "to": "Dependent", "cardinalityFrom": "1..1", "cardinalityTo": "0..N", "confidence": 87},
+    {"id": "el_4", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
   ]
 }
 
 CRITICAL RULES:
-- Each element MUST have unique "id" (e.g., "el_1", "el_2", etc.)
-- Entity subTypes: "strong", "weak"
-- Relationship subTypes: "one-to-one", "one-to-many", "many-to-many"
-- Relationships MUST have "from" and "to" (entity names)
-- For "one-to-many": from entity is the ONE side, to entity is the MANY side
-- Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
-- Attributes MUST have "belongsTo" (name) and "belongsToType" ("entity", "relationship", or "attribute")
-- OPTIONAL: If diagram shows (min,max) notation like (0,N) or (1,1) near entities, add "cardinalityFrom" and "cardinalityTo" fields
-- Cardinality format: "0..1" (optional, at most one), "1..1" (exactly one), "0..N" (optional, many), "1..N" (at least one, many)
-- When reading cardinality: the numbers near an entity show that entity's participation (e.g., if "0,N" is near Patient, then Patient side is "0..N")
-- confidence: 0-100 (your certainty level) must be realistic, cannot all be 100 or all same confidence
-- Do not misdetect anything especially attributes, must detect all present including primary keys
-- Return ONLY JSON, no markdown, no extra text`
-
+1. Each element needs unique "id" (el_1, el_2, etc.)
+2. Entity subTypes: "strong" or "weak"
+3. Relationship subTypes: "strong" (regular diamond) or "weak" (double diamond)
+4. Relationships MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
+5. Read cardinality from numbers/letters near entities:
+   - (0,N) or M or 0..* near entity → "0..N"
+   - (1,N) or 1..* near entity → "1..N"
+   - (0,1) or 0..1 near entity → "0..1"
+   - (1,1) or just 1 near entity → "1..1"
+If ONLY max shown (just "N", "M", or "1" without min):
+     * Just "N" or "M" → assume min=0 → "0..N"
+     * Just "1" → assume min=0 → "0..1"
+6. Cardinality meanings:
+   - 0..1 = optional, at most one
+   - 1..1 = mandatory, exactly one
+   - 0..N = optional, can be many
+   - 1..N = mandatory, at least one
+7. Direction: If Patient(0,N)─visit─(1,1)Doctor, then from="Patient", to="Doctor"
+8. Attributes MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
+9. Attribute subTypes: "primary_key", "foreign_key", "regular", "derived", "multivalued", "composite"
+10. Primary keys are UNDERLINED - detect carefully
+11. confidence: 0-100 (your certainty level) must be realistic cannot all 100 or cannot all same confidence
+12. do not misdetect anything especially attribute, must detect all present
+13. Return ONLY JSON, no markdown`
 
             },
             {
