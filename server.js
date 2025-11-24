@@ -322,6 +322,7 @@ app.post('/autograde-erd', async (req, res) => {
       - Do NOT make up your own scoring
 
     4. **CARDINALITY SCORING:**
+      - IMPORTANT: Use rubric multiplier (e.g., 0.5 x 16). Even 1 wrong cardinality component = deduct points, NOT full marks
       - Compare each relationship's cardinality component by component
       - Calculate: Points per component = (Cardinality max points) ÷ (Total cardinality components in correct answer)
       - For EACH wrong component: Deduct (Points per component) from Cardinality earned
