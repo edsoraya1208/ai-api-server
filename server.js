@@ -322,12 +322,12 @@ app.post('/autograde-erd', async (req, res) => {
 
 4. Write feedback TO STUDENT using element names only
 
-    4. **CARDINALITY SCORING:**
-  - Each relationship has 2 cardinality components: cardinalityFrom and cardinalityTo
-  - Count EXACT matches only: "0..M" ≠ "1..M" = WRONG
-  - Use rubric multiplier to calculate: (Correct components) × (Points per component)
-  - Example: Rubric says "0.5 x 16 = 8", student gets 15/16 correct → 15 × 0.5 = 7.5 points
-  - ⚠️ NEVER give full Cardinality points if ANY component is wrong
+ 4. **CARDINALITY SCORING:**
+  - Each relationship has 2 cardinalities: cardinalityFrom and cardinalityTo
+  - Each cardinality has 2 parts: min and max (e.g., "1..M" = min:1, max:M)
+  - If rubric says "0.5 x 16 = 8": count all 16 individual min/max values across all relationships
+  - Example: Correct="1..M", Student="0..M" → min wrong (1≠0), max correct (M=M) → 15/16 correct → 15 × 0.5 = 7.5 points
+  - ⚠️ Count exact matches only. NEVER give full points if ANY part is wrong
 
     **FEEDBACK TONE:**
     - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
