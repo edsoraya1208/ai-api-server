@@ -307,29 +307,27 @@ app.post('/autograde-erd', async (req, res) => {
     ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
     **YOUR TASK:**
-    1. FIRST: Check if student's ERD is the same domain as correct answer
-      ⚠️ If COMPLETELY DIFFERENT DOMAIN (e.g., University vs Hospital), award 0 points immediately
-      Example: Correct="Student, Course, Professor" but student="Patient, Doctor, Hospital" → Score: 0/100
-      Feedback: "Your ERD is for a completely different domain. This assignment requires a University ERD, but you submitted a Hospital ERD."
+1. Check domain match first (if different domain → 0 points)
 
-    2. Compare ONLY the detected elements from student submission vs correct answer scheme element by element
-      - Grade based on what's DETECTED in the elements arrays, not assumptions
-      - Use element NAMES only in feedback (never mention el_1, el_2, etc.)
+2. Count exact matches per category:
+   - Entities: name + subType match
+   - Attributes: name + subType + belongsTo match
+   - Primary keys: attributes with subType="primary_key" match
+   - Relationships: name + from + to match
+   - Cardinality: count individual components (cardinalityFrom + cardinalityTo per relationship)
 
-    3. STRICTLY follow the rubric criteria and point allocations:
-      - Award points per category based on correct matches
-      - Deduct from category points when elements differ
-      - Do NOT make up your own scoring
+3. Calculate points: (Correct count) × (Rubric multiplier per element)
+   - Find multiplier from rubric description (e.g., "0.5 x 16" means 0.5 per element)
+   - Multiply correct count by multiplier to get earned points
+
+4. Write feedback TO STUDENT using element names only
 
     4. **CARDINALITY SCORING:**
-      - IMPORTANT: Use rubric multiplier (e.g., 0.5 x 16). Even 1 wrong cardinality component = deduct points, NOT full marks
-      - Compare each relationship's cardinality component by component
-      - Calculate: Points per component = (Cardinality max points) ÷ (Total cardinality components in correct answer)
-      - For EACH wrong component: Deduct (Points per component) from Cardinality earned
-      - **CRITICAL: If ANY cardinality differs from correct answer, Cardinality earned MUST be less than Cardinality max**
-      - Example: 8 points for Cardinality, 16 total components → 0.5 per component
-        * Correct="1..M", Student="0..M" → 1 wrong component → deduct 0.5 → Score: 7.5/8
-      - **NEVER award full Cardinality points if you detect ANY cardinality mismatch in feedback**
+  - Each relationship has 2 cardinality components: cardinalityFrom and cardinalityTo
+  - Count EXACT matches only: "0..M" ≠ "1..M" = WRONG
+  - Use rubric multiplier to calculate: (Correct components) × (Points per component)
+  - Example: Rubric says "0.5 x 16 = 8", student gets 15/16 correct → 15 × 0.5 = 7.5 points
+  - ⚠️ NEVER give full Cardinality points if ANY component is wrong
 
     **FEEDBACK TONE:**
     - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
