@@ -294,81 +294,84 @@ app.post('/autograde-erd', async (req, res) => {
     // Build comprehensive comparison prompt
     const prompt = `You are a STRICT ERD grading assistant.
 
-**GRADING INSTRUCTIONS:**
-1. Compare ONLY the detected elements from student submission vs correct answer scheme
-2. STRICTLY follow the rubric criteria and point allocations
-3. Award points based on rubric categories - do NOT make up your own scoring
-4. Grade based on what's DETECTED in the elements arrays, not assumptions
+    **CORRECT ANSWER (What lecturer expects):**
+    ${JSON.stringify(correctAnswer.elements, null, 2)}
 
-**CRITICAL VALIDATION - CHECK FIRST:**
-⚠️ If the student's ERD is a COMPLETELY DIFFERENT DOMAIN from the correct answer (e.g., University vs Hospital vs Business), award 0 points immediately.
-Example: Correct answer has "Student, Course, Professor" but student submitted "Patient, Doctor, Hospital" → Score: 0/100, feedback: "Your ERD is for a completely different domain. This assignment requires a University ERD, but you submitted a Hospital ERD."
+    **STUDENT'S SUBMISSION:**
+    ${JSON.stringify(studentElements, null, 2)}
 
-**CORRECT ANSWER (What lecturer expects):**
-${JSON.stringify(correctAnswer.elements, null, 2)}
+    ${rubricStructured ? `**GRADING RUBRIC:**
+    Total Points: ${rubricStructured.totalPoints}
+    Criteria:
+    ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
+    ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
-**STUDENT'S SUBMISSION:**
-${JSON.stringify(studentElements, null, 2)}
+    **YOUR TASK:**
+    1. FIRST: Check if student's ERD is the same domain as correct answer
+      ⚠️ If COMPLETELY DIFFERENT DOMAIN (e.g., University vs Hospital), award 0 points immediately
+      Example: Correct="Student, Course, Professor" but student="Patient, Doctor, Hospital" → Score: 0/100
+      Feedback: "Your ERD is for a completely different domain. This assignment requires a University ERD, but you submitted a Hospital ERD."
 
-${rubricStructured ? `**GRADING RUBRIC:**
-Total Points: ${rubricStructured.totalPoints}
-Criteria:
-${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
-` : '**No rubric provided. Use standard ERD grading criteria.**'}
+    2. Compare ONLY the detected elements from student submission vs correct answer scheme element by element
+      - Grade based on what's DETECTED in the elements arrays, not assumptions
+      - Use element NAMES only in feedback (never mention el_1, el_2, etc.)
 
-**YOUR TASK:**
-1. Compare student vs correct answer element by element
-2. Follow rubric point allocation STRICTLY - award points per category based on matches
-3. Deduct from category points when elements differ (e.g., wrong cardinality → deduct from Cardinality points)
-4. Provide feedback using element NAMES only (never mention el_1, el_2, etc.), to STUDENTS, not self corrections.
+    3. STRICTLY follow the rubric criteria and point allocations:
+      - Award points per category based on correct matches
+      - Deduct from category points when elements differ
+      - Do NOT make up your own scoring
 
-**CARDINALITY GRADING:**
-- If student's cardinality differs from correct answer (e.g., "0..M" vs "1..M"), deduct points from the Cardinality category
-- Example: Correct="1..M", Student="0..M" → Wrong minimum cardinality, deduct points
+    4. **CARDINALITY SCORING:**
+      - Compare each relationship's cardinality component by component
+      - Calculate: Points per component = (Cardinality max points) ÷ (Total cardinality components in correct answer)
+      - For EACH wrong component: Deduct (Points per component) from Cardinality earned
+      - **CRITICAL: If ANY cardinality differs from correct answer, Cardinality earned MUST be less than Cardinality max**
+      - Example: 8 points for Cardinality, 16 total components → 0.5 per component
+        * Correct="1..M", Student="0..M" → 1 wrong component → deduct 0.5 → Score: 7.5/8
+      - **NEVER award full Cardinality points if you detect ANY cardinality mismatch in feedback**
 
-**FEEDBACK TONE:**
-- Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
-- Be concise, no self-corrections or recalculations in the feedback text
-- If everything is perfect, just say: "Excellent work! All elements are correct."
-- Do NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
+    **FEEDBACK TONE:**
+    - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
+    - Be concise, no self-corrections or recalculations in the feedback text
+    - If everything is perfect, just say: "Excellent work! All elements are correct."
+    - Do NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
 
-**RETURN FORMAT:**
-Return ONLY valid JSON, no markdown code blocks, no extra text.
+    **RETURN FORMAT:**
+    Return ONLY valid JSON, no markdown code blocks, no extra text.
 
-{
-  "totalScore": 85,
-  "maxScore": ${rubricStructured?.totalPoints || 100},
-  "breakdown": [
-    {"category": "Entities", "earned": 25, "max": 30, "feedback": "You correctly identified Student, Course, and Professor entities. However, you are missing the Department entity which is needed to organize professors by their departments."},
-    {"category": "Relationships", "earned": 20, "max": 30, "feedback": "The Enrolls relationship between Student and Course is correct with many-to-many cardinality. However, the Advises relationship should be one-to-many (one professor advises multiple students) but you set it as one-to-one. You are also missing the Teaches relationship between Professor and Course."},
-    {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Most attributes are placed correctly. However, the email attribute belongs to the Student entity, not the Course entity. Without this correction, you cannot store student contact information properly. Also missing primary key designation for StudentID in the Student entity."}
-  ],
-  "feedback": {
-    "correct": [
-      "All three main entities (Student, Course, Professor) are correctly identified",
-      "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses and courses to have multiple students"
-    ],
-    "missing": [
-      "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
-      "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
-    ],
-    "incorrect": [
-      "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
-      "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
-    ]
-  },
-  "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
-}
+    {
+      "totalScore": 85,
+      "maxScore": ${rubricStructured?.totalPoints || 100},
+      "breakdown": [
+        {"category": "Entities", "earned": 25, "max": 30, "feedback": "You correctly identified Student, Course, and Professor entities. However, you are missing the Department entity which is needed to organize professors by their departments."},
+        {"category": "Relationships", "earned": 20, "max": 30, "feedback": "The Enrolls relationship between Student and Course is correct with many-to-many cardinality. However, the Advises relationship should be one-to-many (one professor advises multiple students) but you set it as one-to-one. You are also missing the Teaches relationship between Professor and Course."},
+        {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Most attributes are placed correctly. However, the email attribute belongs to the Student entity, not the Course entity. Without this correction, you cannot store student contact information properly. Also missing primary key designation for StudentID in the Student entity."}
+      ],
+      "feedback": {
+        "correct": [
+          "All three main entities (Student, Course, Professor) are correctly identified",
+          "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses and courses to have multiple students"
+        ],
+        "missing": [
+          "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
+          "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+        ],
+        "incorrect": [
+          "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
+          "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
+        ]
+      },
+      "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
+    }
 
-**CRITICAL RULES:**
-- Return ONLY valid JSON, no markdown code blocks
-- Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
-- breakdown array MUST have objects with: category, earned, max, feedback
-- feedback object MUST have: correct (array), missing (array), incorrect (array)
-- If any section is empty, use empty array [] not null
-- Do not add any text before or after the JSON
-- BE STRICT AND FAIR
-- You are talking to the student, use proper pronouns
+    **CRITICAL RULES:**
+    - Return ONLY valid JSON, no markdown code blocks
+    - Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
+    - breakdown array MUST have objects with: category, earned, max, feedback
+    - feedback object MUST have: correct (array), missing (array), incorrect (array)
+    - If any section is empty, use empty array [] not null
+    - Do not add any text before or after the JSON
+    - BE STRICT AND FAIR
 `;
 
     // Call OpenRouter AI
