@@ -95,7 +95,7 @@ DETECT ALL:
 ✅ Entities (strong=single rectangle, weak=double rectangle)
 ✅ Relationships (strong=single diamond, weak=double diamond) with cardinality from BOTH sides
 ✅ Attributes with correct subTypes:
-   - primary_key: UNDERLINED text
+   - primary_key: UNDERLINED text only (dont assume from name)
    - multivalued: DOUBLE circle/oval border
    - derived: dashed circle/oval
    - composite: attribute connected to sub-attributes
@@ -294,82 +294,84 @@ app.post('/autograde-erd', async (req, res) => {
     // Build comprehensive comparison prompt
     const prompt = `You are a STRICT ERD grading assistant.
 
-**CORRECT ANSWER (What lecturer expects):**
+**CORRECT ANSWER:**
 ${JSON.stringify(correctAnswer.elements, null, 2)}
 
-**STUDENT'S SUBMISSION:**
+**STUDENT SUBMISSION:**
 ${JSON.stringify(studentElements, null, 2)}
 
-${rubricStructured ? `**GRADING RUBRIC:**
-Total Points: ${rubricStructured.totalPoints}
-Criteria:
-${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
-` : '**No rubric provided. Use standard ERD grading criteria.**'}
+${rubricStructured ? `**RUBRIC:**
+Total: ${rubricStructured.totalPoints} points
+${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} pts - ${c.description}`).join('\n')}
+` : '**No rubric. Use standard ERD criteria.**'}
 
-**STRICT GRADING PROCESS:**
+---
+**GRADING STEPS:**
 
-STEP 1: Count elements in CORRECT ANSWER
-- Entities: [count them]
-- Attributes: [count them]
-- Primary Keys: [count them]
-- Relationships: [count them]
-- Cardinality items in rubric: [extract number after "x"]
+STEP 1: COUNT CORRECT ANSWER ELEMENTS
+- Entities: [count]
+- Attributes: [count] 
+- Primary Keys: [count subType="primary_key"]
+- Relationships: [count]
+- Cardinality items: [number after "x" in rubric]
 
-STEP 2: Determine Cardinality Mode
-- Ratio = (Cardinality items) ÷ (Number of Relationships)
-- If Ratio > 3 → Component Mode (each relationship = 4 items: from-min, from-max, to-min, to-max)
-- If Ratio ≤ 3 → Endpoint Mode (each relationship = 2 items: from-tag, to-tag)
+STEP 2: DETERMINE CARDINALITY MODE
+Ratio = (Cardinality items) ÷ (Relationships count)
+- If Ratio > 3 → COMPONENT MODE (4 per relationship: from-min, from-max, to-min, to-max)
+- If Ratio ≤ 3 → ENDPOINT MODE (2 per relationship: from-tag, to-tag)
 
-STEP 3: Match student elements to correct answer ONE BY ONE
-- For Entities: Check name match (lenient: "phone" = "phone_number")
-- For Attributes: Check name + belongsTo match (lenient naming)
-- For Primary Keys: Check subType="primary_key" (STRICT: don't assume from name)
-- For Relationships: Check name + from + to (ignore array order, lenient naming)
-- For Cardinality:
-  * In Component Mode: Split string into Min/Max. Compare separately. (Example: "0..M" vs "1..M" has 1 match: 'M',  add 1 to count STEP 4)
-  * In Endpoint Mode: Check ENTIRE tag. Count correct endpoints only if EXACT match.
+STEP 3: MATCH ELEMENTS (ONE BY ONE)
+**Entities:** name match ${rubricStructured?.criteria.find(c => c.category.toLowerCase().includes('entit'))?.description.toLowerCase().includes('lenient') ? '(lenient: "phone" = "phone_number")' : '(STRICT: exact match)'}
+**Attributes:** name + belongsTo match ${rubricStructured?.criteria.find(c => c.category.toLowerCase().includes('attrib'))?.description.toLowerCase().includes('lenient') ? '(lenient naming)' : '(STRICT: exact match)'}
+**Primary Keys:** subType="primary_key" (STRICT - don't assume from name)
+**Relationships:** name + from + to ${rubricStructured?.criteria.find(c => c.category.toLowerCase().includes('relation'))?.description.toLowerCase().includes('lenient') ? '(lenient naming, ignore array order)' : '(STRICT: exact match)'}
+**Cardinality:**
+  COMPONENT MODE: Split "0..M" into min="0" and max="M". Compare EACH separately.
+    Example: Student "1..M" vs Correct "0..M" → 1 match (max="M"), 1 wrong (min) → Count = 1
+  ENDPOINT MODE: Match ENTIRE tag. "0..M" ≠ "1..M" → Count = 0
 
-STEP 4: Calculate scores using rubric multipliers
-- Entities: (correct count) × (multiplier)
-- Attributes: (correct count) × (multiplier)
-- Primary Keys: (correct count) × (multiplier)
-- Relationships: (correct count) × (multiplier)
-- Cardinality: (correct items based on mode) × (multiplier)
+STEP 4: CALCULATE SCORES
+Extract multiplier from rubric (e.g., "0.5 x 16" → multiplier = 0.5)
+- Entities: (correct count) × (multiplier) = earned
+- Attributes: (correct count) × (multiplier) = earned  
+- Primary Keys: (correct count) × (multiplier) = earned
+- Relationships: (correct count) × (multiplier) = earned
+- Cardinality: (correct items from Step 3) × (multiplier) = earned
 
-STEP 5: Write feedback based ONLY on what you found in Step 3
-- Do NOT hallucinate missing elements
-- Do NOT mention confidence scores
-- Only describe actual differences between correct answer and student submission
+STEP 5: WRITE FEEDBACK
+Base ONLY on Step 3 findings. Do NOT hallucinate.
+Tone: "You correctly identified..." (NOT "The student...")
+If perfect: "Excellent work! All elements correct."
+NO phrases: "Re-checking", "Adjusting", "Confidence"
 
-**OUTPUT JSON:**
+---
+**OUTPUT (VALID JSON ONLY):**
 {
-  "totalScore": [sum of all earned points],
+  "totalScore": [sum earned],
   "maxScore": ${rubricStructured?.totalPoints || 100},
   "breakdown": [
-    {"category": "Entities", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
-    {"category": "Attributes", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
-    {"category": "Primary Keys", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
-    {"category": "Relationships", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
-    {"category": "Cardinality", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches with specific relationship names]"}
+    {"category": "Entities", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
+    {"category": "Attributes", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
+    {"category": "Primary Keys", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
+    {"category": "Relationships", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
+    {"category": "Cardinality", "earned": [calc], "max": [rubric], "feedback": "[specific relationship names + what's wrong]"}
   ],
   "feedback": {
-    "correct": ["[list what student got right]"],
-    "missing": ["[list what student is missing from correct answer, for ex:
-            "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
-            "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
-            if nothing missed say none]"],
-    "incorrect": ["[list what student has wrong ONLY compared to correct answer]"]
+    "correct": ["[what student got right - helpful for review]"],
+    "missing": ["[what's absent from correct answer, e.g., 'Department entity - needed to track professor departments']"],
+    "incorrect": ["[what's wrong vs correct answer, e.g., 'Advises cardinality is 1..1 but should be 1..M']"]
   },
-  "overallComment": "[2-3 sentences summary]"
+  "overallComment": "[2-3 sentence summary]"
 }
 
-**ABSOLUTE RULES:**
-- Return ONLY valid JSON
-- Scores MUST match your Step 4 calculations
-- Feedback MUST match your Step 3 findings
-- Do NOT hallucinate elements not in the JSONs provided
-- Do NOT mention confidence scores or implied elements
-- Write to student: "You identified..." NOT "The student..."
+**CRITICAL RULES:**
+1. Return ONLY valid JSON (no markdown, no extra text)
+2. Scores MUST match Step 4 calculations exactly
+3. Feedback MUST match Step 3 findings (no hallucinations)
+4. Cardinality: In Component Mode, count each min/max separately. In Endpoint Mode, count exact matches only.
+5. If rubric mentions "lenient" for a category, allow name variations (e.g., "phone" = "phone_number") but still mark in feedback
+6. Empty arrays = [], never null
+7. Write to student directly
 `;
     // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -379,7 +381,7 @@ STEP 5: Write feedback based ONLY on what you found in Step 3
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-001',
+        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
         messages: [{
           role: 'user',
           content: prompt
