@@ -294,82 +294,61 @@ app.post('/autograde-erd', async (req, res) => {
     // Build comprehensive comparison prompt
     const prompt = `You are a STRICT ERD grading assistant.
 
-    **CORRECT ANSWER (What lecturer expects):**
-    ${JSON.stringify(correctAnswer.elements, null, 2)}
+**CORRECT ANSWER (What lecturer expects):**
+${JSON.stringify(correctAnswer.elements, null, 2)}
 
-    **STUDENT'S SUBMISSION:**
-    ${JSON.stringify(studentElements, null, 2)}
+**STUDENT'S SUBMISSION:**
+${JSON.stringify(studentElements, null, 2)}
 
-    ${rubricStructured ? `**GRADING RUBRIC:**
-    Total Points: ${rubricStructured.totalPoints}
-    Criteria:
-    ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
-    ` : '**No rubric provided. Use standard ERD grading criteria.**'}
+${rubricStructured ? `**GRADING RUBRIC:**
+Total Points: ${rubricStructured.totalPoints}
+Criteria:
+${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
+` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
-    **YOUR TASK:**
-1. Check domain match first (if different domain → 0 points)
+**GRADING RULES:**
 
-2. Count exact matches per category:
-   - Entities: name + subType match (LENIENT: accept naming variations if meaning is same, e.g., "phone_number" vs "phone" vs "phoneNum")
-   - Attributes: name + subType + belongsTo match (LENIENT: same naming flexibility)
-   - Primary keys: **STRICT VISUAL CHECK** - attributes with subType="primary_key" match. DO NOT assume "ID" suffix means primary key unless it's visually marked (underlined) in the diagram data.
-   - Relationships: **SEMANTIC MATCHING** - Match by (name + from + to entities), IGNORE array index/order. Use lenient name matching (e.g., "sign" = "signs" = "Sign"). A relationship is correct if the name meaning matches AND connects the same two entities, regardless of position in the arrays.
-   - Cardinality: count individual components (cardinalityFrom + cardinalityTo per relationship)
+1. **Domain Check:** If domains differ → 0 points total, stop grading.
 
-   **NAMING LENIENCY RULES:**
-   - Accept variations like: "phone_number" = "phone" = "phoneNum" = "phone num"
-   - Accept variations like: "student_id" = "studentID" = "StudentId"
-   - Accept variations like: "sign" = "signs" = "Sign" = "signing"
-   - If names differ slightly but mean the same thing, count as CORRECT
-   - Add a polite suggestion in feedback for standardization (e.g., "Consider using consistent naming like 'phone_number' for clarity")
-   - DO NOT deduct points for these naming variations
+2. **Matching Rules (with Leniency):**
+   - **Entities:** Match by name + subType. Names can vary slightly if meaning is same (e.g., "Student" = "Students"). If rubric allows, mention minor naming variations as suggestions, not errors.
+   - **Attributes:** Match by name + subType + belongsTo. Same naming leniency applies (e.g., "phone_number" = "phone" = "phoneNum"). If rubric allows, mention standardization suggestions without deducting points.
+   - **Primary Keys:** MUST have subType="primary_key". Do NOT assume "ID" names are primary keys without visual marking.
+   - **Relationships:** Match by (name + from entity + to entity). Ignore array order. Same naming leniency (e.g., "sign" = "signs" = "Sign"). If rubric allows, suggest standardization in feedback WITHOUT deducting points.
+
+3. **Cardinality Scoring (CRITICAL):**
    
-   **VISUAL CUE ENFORCEMENT:**
-   - Primary keys MUST be identified by subType="primary_key" in the data, not by name alone
-   - An attribute named "StudentID" is NOT a primary key unless subType="primary_key"
-   - Always rely on the diagram's visual indicators (underlines, markers) not naming conventions
+   **Step A - Determine Mode:**
+   - Count total Relationships in CORRECT ANSWER = R
+   - Extract cardinality count from rubric (e.g., "0.5 x 16" → 16)
+   - Calculate: Cardinality Items ÷ R = Ratio
+   
+   **Step B - Apply Grading Mode:**
+   
+   IF Ratio > 3 (e.g., 16 ÷ 4 = 4):
+   → **Component Mode** - Grade each min/max separately
+   - Each relationship has 4 components: from-min, from-max, to-min, to-max
+   - Example: Correct "1..M" vs Student "0..M"
+     - Min: "0" ≠ "1" → 0 points
+     - Max: "M" = "M" → +0.5 points
+   - Score = (Correct components) × (Rubric multiplier)
+   
+   IF Ratio ≤ 3 (e.g., 8 ÷ 4 = 2):
+   → **Endpoint Mode** - Grade entire side as one unit
+   - Each relationship has 2 endpoints: from-tag, to-tag
+   - Example: Correct "1..M" vs Student "0..M" → WRONG (0 points, no partial credit)
+   - Score = (Correct endpoints) × (Rubric multiplier)
 
-   **RELATIONSHIP MATCHING RULES:**
-   - IGNORE array index and order completely
-   - Match relationships by: (relationship name) + (from entity) + (to entity)
-   - Example: "sign" connecting Patient→Insurance Agent is the SAME relationship regardless of whether it appears at index 0 or index 3
-   - Do NOT penalize for different array positions
+   **Step C - Calculate Score:**
+   - Start at 0
+   - Add points ONLY for correct matches
+   - DO NOT give full marks if ANY component/endpoint is wrong
 
-3. **Determine Cardinality Grading Mode (Dynamic Check):**
-       - A = Count the total number of Relationships in the CORRECT ANSWER list provided above.
-       - B = Extract the "Expected Count" number from the Rubric text (e.g., if rubric says "0.5 x 16", then B=16).
-       - Calculate Ratio: B divided by A.
-
-       IF Ratio is greater than 3 (e.g., 16 items / 4 rels = 4):
-         - ENABLE "Component Mode" (Grade Min and Max separately).
-         - Each Relationship has 4 scoreable parts: From-Min, From-Max, To-Min, To-Max.
-         - Example: If correct is "1..M" and student has "0..M":
-            - Min "0" vs "1" = Wrong (Add 0).
-            - Max "M" vs "M" = Correct (Add Multiplier).
-         - Partial credit allowed per component.
-
-       IF Ratio is less than or equal to 3 (e.g., 8 items / 4 rels = 2):
-         - ENABLE "Endpoint Mode" (Grade the whole tag per side).
-         - Each Relationship has 2 scoreable parts: From-Tag (e.g. "0..M"), To-Tag.
-         - Partial matches (e.g. "0..M" vs "1..M") count as WRONG (0 pts).
-         - No partial credit within an endpoint.
-
-       **Calculate Points (ADDITIVE ONLY):**
-        - Start score at 0.
-        - DO NOT subtract points for errors. ONLY ADD points for correct matches based on the Mode determined in Step 3.
-        - Multiply (Count of Correct Matches) * (Rubric Multiplier).
-        - Example Component Mode: 15 correct out of 16, multiplier 0.5 → 15 × 0.5 = 7.5 points
-        - Example Endpoint Mode: 7 correct out of 8, multiplier 0.5 → 7 × 0.5 = 3.5 points
-
-4. Write feedback TO STUDENT using element names only
-
-    **FEEDBACK TONE:**
+   4.FEEDBACK TONE:**
     - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
     - Be concise, no self-corrections or recalculations in the feedback text
     - If everything is perfect, just say: "Excellent work! All elements are correct."
-    - DO NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
-    - DO NOT mention array indices, order, or position in feedback (e.g., never say "index 0" or "different order")
-    - Focus only on semantic correctness: what elements are right/wrong and why
+    - Do NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
 
     **RETURN FORMAT:**
     Return ONLY valid JSON, no markdown code blocks, no extra text.
