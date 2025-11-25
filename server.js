@@ -337,27 +337,51 @@ app.post('/autograde-erd', async (req, res) => {
         - Start at 0. ONLY ADD points for correct matches based on Mode above.
         - Multiply (Correct Count) * (Rubric Multiplier).
 
-    4. **Feedback Generation:**
-       - Use the student's actual element names.
-       - **Tone:** Direct and professional ("You correctly identified...", "You missed...").
-       - **Naming Comments:** If using Semantic matching, you may mark it correct but add a tip: "Correctly identified 'Phone' (rubric uses 'PhoneNum')."
+    4. Write feedback TO STUDENT using element names only
 
-    **RETURN FORMAT (JSON ONLY, NO MARKDOWN):**
+    **FEEDBACK TONE:**
+    - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
+    - Be concise, no self-corrections or recalculations in the feedback text
+    - If everything is perfect, just say: "Excellent work! All elements are correct."
+    - Do NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
+
+    **RETURN FORMAT:**
+    Return ONLY valid JSON, no markdown code blocks, no extra text.
+
     {
-      "totalScore": 0,
+      "totalScore": 85,
       "maxScore": ${rubricStructured?.totalPoints || 100},
       "breakdown": [
-        {"category": "Entities", "earned": 0, "max": 0, "feedback": "Specific feedback here."}
+        {"category": "Entities", "earned": 25, "max": 30, "feedback": "You correctly identified Student, Course, and Professor entities. However, you are missing the Department entity which is needed to organize professors by their departments."},
+        {"category": "Relationships", "earned": 20, "max": 30, "feedback": "The Enrolls relationship between Student and Course is correct with many-to-many cardinality. However, the Advises relationship should be one-to-many (one professor advises multiple students) but you set it as one-to-one. You are also missing the Teaches relationship between Professor and Course."},
+        {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Most attributes are placed correctly. However, the email attribute belongs to the Student entity, not the Course entity. Without this correction, you cannot store student contact information properly. Also missing primary key designation for StudentID in the Student entity."}
       ],
       "feedback": {
-        "correct": ["List specific correct elements"],
-        "missing": ["List missing elements"],
-        "incorrect": ["List errors with brief explanation"]
+        "correct": [
+          "All three main entities (Student, Course, Professor) are correctly identified",
+          "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses and courses to have multiple students"
+        ],
+        "missing": [
+          "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
+          "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+        ],
+        "incorrect": [
+          "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
+          "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
+        ]
       },
-      "overallComment": "Summary of performance."
+      "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
     }
-`;
 
+    **CRITICAL RULES:**
+    - Return ONLY valid JSON, no markdown code blocks
+    - Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
+    - breakdown array MUST have objects with: category, earned, max, feedback
+    - feedback object MUST have: correct (array), missing (array), incorrect (array)
+    - If any section is empty, use empty array [] not null
+    - Do not add any text before or after the JSON
+    - BE STRICT AND FAIR
+`;
     // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
