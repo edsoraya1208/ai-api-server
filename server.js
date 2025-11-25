@@ -72,7 +72,7 @@ app.post('/detect-erd', async (req, res) => {
 CRITICAL DETECTION RULES (MUST FOLLOW):
 1. PRIMARY KEYS are UNDERLINED text - detect ALL underlines carefully
 2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
-3. CARDINALITY must be read from BOTH sides of relationship:
+3. CARDINALITY must be read from BOTH sides of relationship (CAREFUL, SOMETIMES CARDINALITY TO DIFFERENT ENTITIES FROM SAME RELATIONSHIP ARE CLOSELY PUT TOGETHER, DECIDE WISELY WHICH IS FOR WHICH):
    - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
    - OR look for M, 1, N letters near entities
    - from="EntityA" to="EntityB" means: EntityA's cardinality goes in cardinalityFrom, EntityB's in cardinalityTo
