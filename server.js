@@ -306,91 +306,67 @@ Criteria:
 ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
 ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
-**GRADING RULES:**
+**STRICT GRADING PROCESS:**
 
-1. **Domain Check:** If domains differ → 0 points total, stop grading.
+STEP 1: Count elements in CORRECT ANSWER
+- Entities: [count them]
+- Attributes: [count them]
+- Primary Keys: [count them]
+- Relationships: [count them]
+- Cardinality items in rubric: [extract number after "x"]
 
-2. **Matching Rules (with Leniency):**
-   - **Entities:** Match by name + subType. Names can vary slightly if meaning is same (e.g., "Student" = "Students"). If rubric allows, mention minor naming variations as suggestions, not errors.
-   - **Attributes:** Match by name + subType + belongsTo. Same naming leniency applies (e.g., "phone_number" = "phone" = "phoneNum"). If rubric allows, mention standardization suggestions without deducting points.
-   - **Primary Keys:** MUST have subType="primary_key". Do NOT assume "ID" names are primary keys without visual marking.
-   - **Relationships:** Match by (name + from entity + to entity). Ignore array order. Same naming leniency (e.g., "sign" = "signs" = "Sign"). If rubric allows, suggest standardization in feedback WITHOUT deducting points.
+STEP 2: Determine Cardinality Mode
+- Ratio = (Cardinality items) ÷ (Number of Relationships)
+- If Ratio > 3 → Component Mode (each relationship = 4 items: from-min, from-max, to-min, to-max)
+- If Ratio ≤ 3 → Endpoint Mode (each relationship = 2 items: from-tag, to-tag)
 
-4. **CARDINALITY SCORING:**
+STEP 3: Match student elements to correct answer ONE BY ONE
+- For Entities: Check name match (lenient: "phone" = "phone_number")
+- For Attributes: Check name + belongsTo match (lenient naming)
+- For Primary Keys: Check subType="primary_key" (STRICT: don't assume from name)
+- For Relationships: Check name + from + to (ignore array order, lenient naming)
+- For Cardinality:
+  * In Component Mode: Check EACH min and max separately. Count correct components.
+  * In Endpoint Mode: Check ENTIRE tag. Count correct endpoints only if EXACT match.
 
-   **Step A - Determine Grading Mode:**
-   - Count total Relationships in CORRECT ANSWER = R
-   - Extract cardinality count from rubric text (e.g., "0.5 x 16" → 16)
-   - Calculate Ratio = Cardinality Count ÷ R
+STEP 4: Calculate scores using rubric multipliers
+- Entities: (correct count) × (multiplier)
+- Attributes: (correct count) × (multiplier)
+- Primary Keys: (correct count) × (multiplier)
+- Relationships: (correct count) × (multiplier)
+- Cardinality: (correct items based on mode) × (multiplier)
 
-   **Step B - Apply Mode & Count Correct Items:**
-   
-   IF Ratio > 3:
-   → **Component Mode** (Grade min/max separately)
-   - Each relationship has 4 scoreable components: from-min, from-max, to-min, to-max
-   - Example: Correct "1..M" vs Student "0..M"
-     * from-min: "0" ≠ "1" → NOT correct
-     * from-max: "M" = "M" → correct
-   - Count EVERY correct component across ALL relationships
-   - CRITICAL EXAMPLE: 4 relationships, 15 correct components out of 16 total → Score = 15 × 0.5 = 7.5 points (NOT 8 points)
+STEP 5: Write feedback based ONLY on what you found in Step 3
+- Do NOT hallucinate missing elements
+- Do NOT mention confidence scores
+- Only describe actual differences between correct answer and student submission
 
-   IF Ratio ≤ 3:
-   → **Endpoint Mode** (Grade whole side as one unit)
-   - Each relationship has 2 scoreable components: from-tag, to-tag
-   - Partial matches DO NOT count (e.g., "0..M" ≠ "1..M" = NOT correct)
-   - Count ONLY endpoints that match EXACTLY
-   - CRITICAL EXAMPLE: 4 relationships, 7 correct endpoints out of 8 total → Score = 7 × 0.5 = 3.5 points (NOT 4 points)
+**OUTPUT JSON:**
+{
+  "totalScore": [sum of all earned points],
+  "maxScore": ${rubricStructured?.totalPoints || 100},
+  "breakdown": [
+    {"category": "Entities", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
+    {"category": "Attributes", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
+    {"category": "Primary Keys", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
+    {"category": "Relationships", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches]"},
+    {"category": "Cardinality", "earned": [calculated], "max": [from rubric], "feedback": "[describe matches/mismatches with specific relationship names]"}
+  ],
+  "feedback": {
+    "correct": ["[list what student got right]"],
+    "missing": ["[list what student is missing from correct answer]"],
+    "incorrect": ["[list what student has wrong compared to correct answer]"]
+  },
+  "overallComment": "[2-3 sentences summary]"
+}
 
-   **Step C - Final Cardinality Score Calculation:**
-   - Cardinality Score = (Number of Correct Items Based on Mode) × (Rubric Multiplier)
-   - In Component Mode: If 15 out of 16 components correct → 15 × 0.5 = 7.5 points
-   - In Endpoint Mode: If 7 out of 8 endpoints correct → 7 × 0.5 = 3.5 points
-   - ⚠️ CRITICAL: You MUST use the correct count based on the mode determined in Step B
-   - ⚠️ NEVER give full Cardinality points if ANY item is wrong
-   - ⚠️ Do NOT round up or give extra points - be mathematically precise
-
-   4.FEEDBACK TONE:**
-    - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
-    - Be concise, no self-corrections or recalculations in the feedback text
-    - If everything is perfect, just say: "Excellent work! All elements are correct."
-    - Do NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
-
-    **RETURN FORMAT:**
-    Return ONLY valid JSON, no markdown code blocks, no extra text.
-
-    {
-      "totalScore": 85,
-      "maxScore": ${rubricStructured?.totalPoints || 100},
-      "breakdown": [
-        {"category": "Entities", "earned": 25, "max": 30, "feedback": "You correctly identified Student, Course, and Professor entities. However, you are missing the Department entity which is needed to organize professors by their departments."},
-        {"category": "Relationships", "earned": 20, "max": 30, "feedback": "The Enrolls relationship between Student and Course is correct with many-to-many cardinality. However, the Advises relationship should be one-to-many (one professor advises multiple students) but you set it as one-to-one. You are also missing the Teaches relationship between Professor and Course."},
-        {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Most attributes are placed correctly. However, the email attribute belongs to the Student entity, not the Course entity. Without this correction, you cannot store student contact information properly. Also missing primary key designation for StudentID in the Student entity."}
-      ],
-      "feedback": {
-        "correct": [
-          "All three main entities (Student, Course, Professor) are correctly identified",
-          "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses and courses to have multiple students"
-        ],
-        "missing": [
-          "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
-          "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
-        ],
-        "incorrect": [
-          "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
-          "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
-        ]
-      },
-      "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
-    }
-
-    **CRITICAL RULES:**
-    - Return ONLY valid JSON, no markdown code blocks
-    - Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
-    - breakdown array MUST have objects with: category, earned, max, feedback
-    - feedback object MUST have: correct (array), missing (array), incorrect (array)
-    - If any section is empty, use empty array [] not null
-    - Do not add any text before or after the JSON
-    - BE STRICT AND FAIR
+**ABSOLUTE RULES:**
+- Return ONLY valid JSON
+- Scores MUST match your Step 4 calculations
+- Feedback MUST match your Step 3 findings
+- Do NOT hallucinate elements not in the JSONs provided
+- Do NOT mention confidence scores or implied elements
+- Write to student: "You identified..." NOT "The student..."
 `;
     // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
