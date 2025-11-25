@@ -72,7 +72,7 @@ app.post('/detect-erd', async (req, res) => {
 CRITICAL DETECTION RULES (MUST FOLLOW):
 1. PRIMARY KEYS are UNDERLINED text - detect ALL underlines carefully
 2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
-3. CARDINALITY must be read from BOTH sides of relationship (CAREFUL, SOMETIMES CARDINALITY TO DIFFERENT ENTITIES FROM SAME RELATIONSHIP ARE CLOSELY PUT TOGETHER, DECIDE WISELY WHICH IS FOR WHICH):
+3. CARDINALITY must be read from BOTH sides of relationship 
    - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
    - OR look for M, 1, N letters near entities
    - from="EntityA" to="EntityB" means: EntityA's cardinality goes in cardinalityFrom, EntityB's in cardinalityTo
@@ -364,6 +364,7 @@ Return ONLY valid JSON, no markdown code blocks, no extra text.
     "missing": [
       "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
       "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+      "cardinality for Advises relationship - should be one-to-many (one professor advises multiple students)"
     ],
     "incorrect": [
       "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
