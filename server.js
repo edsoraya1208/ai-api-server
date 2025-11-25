@@ -332,7 +332,7 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
      * from-min: "0" ≠ "1" → 0 points
      * from-max: "M" = "M" → 1 point 
    - Count ALL correct components, multiply by rubric multiplier
-   - Example: 15 correct out of 16 → 15 × 0.5 = 7.5 points --critical
+   - Example: 15 correct out of 16 → 15 × 0.5 = 7.5 points --this is how  marks are calculated for cardinaltiy FOR THIS CASE
 
    IF Ratio ≤ 3:
    → **Endpoint Mode** (Grade whole side as one unit)
