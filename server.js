@@ -292,7 +292,7 @@ app.post('/autograde-erd', async (req, res) => {
     console.log('  - Has rubric:', !!rubricStructured);
 
     // Build comprehensive comparison prompt
-    const prompt = `You are a STRICT ERD grading assistant.
+    const prompt = `You are an ERD grading assistant. Grade EXACTLY as instructed.
 
 **CORRECT ANSWER:**
 ${JSON.stringify(correctAnswer.elements, null, 2)}
@@ -303,75 +303,88 @@ ${JSON.stringify(studentElements, null, 2)}
 ${rubricStructured ? `**RUBRIC:**
 Total: ${rubricStructured.totalPoints} points
 ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} pts - ${c.description}`).join('\n')}
-` : '**No rubric. Use standard ERD criteria.**'}
+` : '**No rubric provided.**'}
 
 ---
-**GRADING STEPS:**
+**GRADING INSTRUCTIONS:**
 
-STEP 1: COUNT CORRECT ANSWER ELEMENTS
-- Entities: [count]
-- Attributes: [count] 
-- Primary Keys: [count subType="primary_key"]
-- Relationships: [count]
-- Cardinality items: [number after "x" in rubric]
+1. **COUNT elements in CORRECT ANSWER:**
+   - Entities: [count them]
+   - Attributes: [count them]
+   - Primary Keys: [count where subType="primary_key"]
+   - Relationships: [count them]
+   - Cardinality: [look at rubric, find number after "x", example: "0.5 x 16" means 16 items total]
 
-STEP 2: DETERMINE CARDINALITY MODE
-Ratio = (Cardinality items) ÷ (Relationships count)
-- If Ratio > 3 → COMPONENT MODE (4 per relationship: from-min, from-max, to-min, to-max)
-- If Ratio ≤ 3 → ENDPOINT MODE (2 per relationship: from-tag, to-tag)
+2. **MATCH student to correct answer:**
+   - Entities: Does name match? Count each match.
+   - Attributes: Does name AND belongsTo match? Count each match.
+   - Primary Keys: Does attribute have subType="primary_key"? Count each match.
+   - Relationships: Does name AND from AND to match? Count each match.
+   - Cardinality: Read next section carefully.
 
-STEP 3: MATCH ELEMENTS (ONE BY ONE)
-**Entities:** name match ${rubricStructured?.criteria.find(c => c.category.toLowerCase().includes('entit'))?.description.toLowerCase().includes('lenient') ? '(lenient: "phone" = "phone_number")' : '(STRICT: exact match)'}
-**Attributes:** name + belongsTo match ${rubricStructured?.criteria.find(c => c.category.toLowerCase().includes('attrib'))?.description.toLowerCase().includes('lenient') ? '(lenient naming)' : '(STRICT: exact match)'}
-**Primary Keys:** subType="primary_key" (STRICT - don't assume from name)
-**Relationships:** name + from + to ${rubricStructured?.criteria.find(c => c.category.toLowerCase().includes('relation'))?.description.toLowerCase().includes('lenient') ? '(lenient naming, ignore array order)' : '(STRICT: exact match)'}
-**Cardinality:**
-  COMPONENT MODE: Split "0..M" into min="0" and max="M". Compare EACH separately.
-    Example: Student "1..M" vs Correct "0..M" → 1 match (max="M"), 1 wrong (min) → Count = 1
-  ENDPOINT MODE: Match ENTIRE tag. "0..M" ≠ "1..M" → Count = 0
+3. **CARDINALITY GRADING (CRITICAL):**
+   
+   Calculate: Ratio = (Cardinality items from rubric) ÷ (Number of relationships)
+   
+   **IF Ratio > 3 → COMPONENT MODE:**
+   - Each relationship has 4 components: from-min, from-max, to-min, to-max
+   - Example: "1..M" has min="1" and max="M"
+   - Compare student vs correct for EACH component separately
+   - Count how many components match
+   - Example: Student has "1..M", Correct has "0..M" → max matches ("M"="M") → 1 match out of 2 components for this side
+   
+   **IF Ratio ≤ 3 → ENDPOINT MODE:**
+   - Each relationship has 2 endpoints: from-tag, to-tag
+   - Compare ENTIRE cardinality string (do NOT split)
+   - "1..M" ≠ "0..M" → 0 matches
+   - "1..M" = "1..M" → 1 match
+   - Count how many endpoints match exactly
 
-STEP 4: CALCULATE SCORES
-Extract multiplier from rubric (e.g., "0.5 x 16" → multiplier = 0.5)
-- Entities: (correct count) × (multiplier) = earned
-- Attributes: (correct count) × (multiplier) = earned  
-- Primary Keys: (correct count) × (multiplier) = earned
-- Relationships: (correct count) × (multiplier) = earned
-- Cardinality: (correct items from Step 3) × (multiplier) = earned
+4. **CALCULATE POINTS:**
+   
+   Extract multiplier from rubric description (example: "0.5 x 16" means multiplier = 0.5)
+   
+   - Entities points = (matches) × (multiplier)
+   - Attributes points = (matches) × (multiplier)
+   - Primary Keys points = (matches) × (multiplier)
+   - Relationships points = (matches) × (multiplier)
+   - Cardinality points = (matches) × (multiplier)
+   
+   **CRITICAL: Each earned points CANNOT exceed max points for that category.**
+   **CRITICAL: Total score CANNOT exceed ${rubricStructured?.totalPoints || 100}.**
 
-STEP 5: WRITE FEEDBACK
-Base ONLY on Step 3 findings. Do NOT hallucinate.
-Tone: "You correctly identified..." (NOT "The student...")
-If perfect: "Excellent work! All elements correct."
-NO phrases: "Re-checking", "Adjusting", "Confidence"
+5. **WRITE FEEDBACK:**
+   - Describe what student got right
+   - Describe what's missing from correct answer
+   - Describe what's wrong compared to correct answer
+   - Use student-facing tone: "You identified..." NOT "The student identified..."
 
 ---
-**OUTPUT (VALID JSON ONLY):**
+**OUTPUT JSON (no markdown, no extra text):**
 {
-  "totalScore": [sum earned],
+  "totalScore": [sum of earned, max ${rubricStructured?.totalPoints || 100}],
   "maxScore": ${rubricStructured?.totalPoints || 100},
   "breakdown": [
-    {"category": "Entities", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
-    {"category": "Attributes", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
-    {"category": "Primary Keys", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
-    {"category": "Relationships", "earned": [calc], "max": [rubric], "feedback": "[matches/mismatches]"},
-    {"category": "Cardinality", "earned": [calc], "max": [rubric], "feedback": "[specific relationship names + what's wrong]"}
+    {"category": "Entities", "earned": [cannot exceed max], "max": [from rubric], "feedback": "..."},
+    {"category": "Attributes", "earned": [cannot exceed max], "max": [from rubric], "feedback": "..."},
+    {"category": "Primary Keys", "earned": [cannot exceed max], "max": [from rubric], "feedback": "..."},
+    {"category": "Relationships", "earned": [cannot exceed max], "max": [from rubric], "feedback": "..."},
+    {"category": "Cardinality", "earned": [cannot exceed max], "max": [from rubric], "feedback": "..."}
   ],
   "feedback": {
-    "correct": ["[what student got right - helpful for review]"],
-    "missing": ["[what's absent from correct answer, e.g., 'Department entity - needed to track professor departments']"],
-    "incorrect": ["[what's wrong vs correct answer, e.g., 'Advises cardinality is 1..1 but should be 1..M']"]
+    "correct": ["..."],
+    "missing": ["..."],
+    "incorrect": ["..."]
   },
-  "overallComment": "[2-3 sentence summary]"
+  "overallComment": "..."
 }
 
-**CRITICAL RULES:**
-1. Return ONLY valid JSON (no markdown, no extra text)
-2. Scores MUST match Step 4 calculations exactly
-3. Feedback MUST match Step 3 findings (no hallucinations)
-4. Cardinality: In Component Mode, count each min/max separately. In Endpoint Mode, count exact matches only.
-5. If rubric mentions "lenient" for a category, allow name variations (e.g., "phone" = "phone_number") but still mark in feedback
-6. Empty arrays = [], never null
-7. Write to student directly
+**RULES:**
+- Return only valid JSON
+- Do NOT exceed max points for any category
+- Do NOT exceed total max score
+- Match elements exactly as shown in the JSONs
+- For cardinality: Use Component Mode if ratio > 3, else Endpoint Mode
 `;
     // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -381,7 +394,7 @@ NO phrases: "Re-checking", "Adjusting", "Confidence"
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+        model: 'meta-llama/llama-4-scout',
         messages: [{
           role: 'user',
           content: prompt
