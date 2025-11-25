@@ -326,7 +326,7 @@ STEP 3: Match student elements to correct answer ONE BY ONE
 - For Primary Keys: Check subType="primary_key" (STRICT: don't assume from name)
 - For Relationships: Check name + from + to (ignore array order, lenient naming)
 - For Cardinality:
-  * In Component Mode: Split string into Min/Max. Compare separately. (Example: "0..M" vs "1..M" has 1 match: 'M', so add 1 to count)
+  * In Component Mode: Split string into Min/Max. Compare separately. (Example: "0..M" vs "1..M" has 1 match: 'M',  add 1 to count STEP 4)
   * In Endpoint Mode: Check ENTIRE tag. Count correct endpoints only if EXACT match.
 
 STEP 4: Calculate scores using rubric multipliers
@@ -354,8 +354,11 @@ STEP 5: Write feedback based ONLY on what you found in Step 3
   ],
   "feedback": {
     "correct": ["[list what student got right]"],
-    "missing": ["[list what student is missing from correct answer, if nothing missed say none]"],
-    "incorrect": ["[list what student has wrong compared to correct answer]"]
+    "missing": ["[list what student is missing from correct answer, for ex:
+            "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
+            "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+            if nothing missed say none]"],
+    "incorrect": ["[list what student has wrong ONLY compared to correct answer]"]
   },
   "overallComment": "[2-3 sentences summary]"
 }
@@ -376,7 +379,7 @@ STEP 5: Write feedback based ONLY on what you found in Step 3
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+        model: 'google/gemini-2.0-flash-001',
         messages: [{
           role: 'user',
           content: prompt
