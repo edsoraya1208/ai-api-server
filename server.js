@@ -316,18 +316,29 @@ app.post('/autograde-erd', async (req, res) => {
    - Relationships: name + from + to match
    - Cardinality: count individual components (cardinalityFrom + cardinalityTo per relationship)
 
-3. Calculate points: (Correct count) × (Rubric multiplier per element)
-   - Find multiplier from rubric description (e.g., "0.5 x 16" means 0.5 per element)
-   - Multiply correct count by multiplier to get earned points
+3. **Determine Cardinality Grading Mode (Dynamic Check):**
+       - A = Count the total number of Relationships in the CORRECT ANSWER list provided above.
+       - B = Extract the "Expected Count" number from the Rubric text (e.g., if rubric says "0.5 x 16", then B=16).
+       - Calculate Ratio: B divided by A.
+
+       IF Ratio is greater than 3 (e.g., 16 items / 4 rels = 4):
+         - ENABLE "Component Mode" (Grade Min and Max separately).
+         - Each Relationship has 4 scoreable parts: From-Min, From-Max, To-Min, To-Max.
+         - Example: If correct is "1..N" and student has "0..N":
+            - Min "0" vs "1" = Wrong (Add 0).
+            - Max "N" vs "N" = Correct (Add Multiplier).
+
+       IF Ratio is less than 3 (e.g., 8 items / 4 rels = 2):
+         - ENABLE "Endpoint Mode" (Grade the whole tag per side).
+         - Each Relationship has 2 scoreable parts: From-Tag (e.g. "0..N"), To-Tag.
+         - Partial matches (e.g. "0..N" vs "1..N") count as WRONG (0 pts).
+
+       **Calculate Points (ADDITIVE ONLY):**
+        - Start score at 0.
+        - DO NOT subtract points for errors. ONLY ADD points for correct matches based on the Mode determined in Step 3.
+        - Multiply (Count of Correct Matches) * (Rubric Multiplier).
 
 4. Write feedback TO STUDENT using element names only
-
-    4. **CARDINALITY SCORING:**
-  - Each relationship has 2 cardinality components: cardinalityFrom and cardinalityTo
-  - Count EXACT matches only: "0..M" ≠ "1..M" = WRONG
-  - Use rubric multiplier to calculate: (Correct components) × (Points per component)
-  - Example: Rubric says "0.5 x 16 = 8", student gets 15/16 correct → 15 × 0.5 = 7.5 points
-  - ⚠️ NEVER give full Cardinality points if ANY component is wrong
 
     **FEEDBACK TONE:**
     - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
