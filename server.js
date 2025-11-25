@@ -316,33 +316,35 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
    - **Primary Keys:** MUST have subType="primary_key". Do NOT assume "ID" names are primary keys without visual marking.
    - **Relationships:** Match by (name + from entity + to entity). Ignore array order. Same naming leniency (e.g., "sign" = "signs" = "Sign"). If rubric allows, suggest standardization in feedback WITHOUT deducting points.
 
-3. **Cardinality Scoring (CRITICAL):**
-   
-   **Step A - Determine Mode:**
-   - Count total Relationships in CORRECT ANSWER = R
-   - Extract cardinality count from rubric (e.g., "0.5 x 16" → 16)
-   - Calculate: Cardinality Items ÷ R = Ratio
-   
-   **Step B - Apply Grading Mode:**
-   
-   IF Ratio > 3 (e.g., 16 ÷ 4 = 4):
-   → **Component Mode** - Grade each min/max separately
-   - Each relationship has 4 components: from-min, from-max, to-min, to-max
-   - Example: Correct "1..M" vs Student "0..M"
-     - Min: "0" ≠ "1" → 0 points
-     - Max: "M" = "M" → +0.5 points
-   - Score = (Correct components) × (Rubric multiplier)
-   
-   IF Ratio ≤ 3 (e.g., 8 ÷ 4 = 2):
-   → **Endpoint Mode** - Grade entire side as one unit
-   - Each relationship has 2 endpoints: from-tag, to-tag
-   - Example: Correct "1..M" vs Student "0..M" → WRONG (0 points, no partial credit)
-   - Score = (Correct endpoints) × (Rubric multiplier)
+4. **CARDINALITY SCORING:**
 
-   **Step C - Calculate Score:**
-   - Start at 0
-   - Add points ONLY for correct matches
-   - DO NOT give full marks if ANY component/endpoint is wrong
+   **Step A - Determine Grading Mode:**
+   - Count total Relationships in CORRECT ANSWER = R
+   - Extract cardinality count from rubric text (e.g., "0.5 x 16" → 16)
+   - Calculate Ratio = Cardinality Count ÷ R
+
+   **Step B - Apply Mode:**
+   
+   IF Ratio > 3:
+   → **Component Mode** (Grade min/max separately)
+   - Each relationship has 4 scoreable components: from-min, from-max, to-min, to-max
+   - Example: Correct "1..M" vs Student "0..M"
+     * from-min: "0" ≠ "1" → 0 points
+     * from-max: "M" = "M" → 1 point 
+   - Count ALL correct components, multiply by rubric multiplier
+   - Example: 15 correct out of 16 → 15 × 0.5 = 7.5 points --critical
+
+   IF Ratio ≤ 3:
+   → **Endpoint Mode** (Grade whole side as one unit)
+   - Each relationship has 2 scoreable components: from-tag, to-tag
+   - Example: Correct "1..M" vs Student "0..M" → WRONG, 0 points (no partial credit)
+   - Count ONLY fully matching endpoints, multiply by rubric multiplier
+   - Example: 7 correct out of 8 → 7 × 0.5 = 3.5 points
+
+   **Step C - Calculate:**
+   - Start score at 0
+   - Add points ONLY for correct matches based on mode
+   - ⚠️ NEVER give full Cardinality points if ANY component is wrong
 
    4.FEEDBACK TONE:**
     - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
