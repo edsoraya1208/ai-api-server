@@ -354,10 +354,26 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} pts - ${c.
    **CRITICAL: Total score CANNOT exceed ${rubricStructured?.totalPoints || 100}.**
 
 5. **WRITE FEEDBACK:**
-   - Describe what student got right
-   - Describe what's missing from correct answer
-   - Describe what's wrong compared to correct answer
-   - Use student-facing tone: "You identified..." NOT "The student identified..."
+   
+   **TONE:** Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
+   **If perfect:** "Excellent work! All elements are correct. give a report (strengths etc)"
+   **If not perfect, structure like this:**
+   
+   CORRECT section example:
+   - "You correctly identified Student, Course, and Professor entities"
+   - "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses"
+   
+   MISSING section example:
+   - "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department"
+   - "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+   
+   INCORRECT section example:
+   - "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students"
+   - "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
+   
+   **DO NOT use phrases:** "Re-checking", "Adjusting score", "Confidence", "seems erroneous"
+   
+   **BE SPECIFIC:** Use actual element names from the JSONs, NEVER USE THE el_1 etc. Explain WHY something is wrong and what impact it has.
 
 ---
 **OUTPUT JSON (no markdown, no extra text):**
