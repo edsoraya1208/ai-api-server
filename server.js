@@ -273,73 +273,103 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// 🆕 Auto-grading endpoint (Hybrid: Code does Math, AI does Feedback)
+// 🆕 Auto-grading endpoint (HYBRID APPROACH)
 app.post('/autograde-erd', async (req, res) => {
   try {
     const { studentElements, correctAnswer, rubricStructured } = req.body;
 
-    // 1. VALIDATION
+    // Validate inputs
     if (!studentElements || !correctAnswer || !correctAnswer.elements) {
-      return res.status(400).json({ error: 'Missing required data' });
+      return res.status(400).json({ 
+        error: 'Missing required data',
+        message: 'Need studentElements, correctAnswer, and rubricStructured'
+      });
     }
 
-    // 2. GROUND TRUTH (The Denominators)
-    // We calculate exactly how many items exist in the correct answer.
-    const groundTruth = {
-      entities: correctAnswer.elements.filter(e => e.type === 'entity').length,
-      attributes: correctAnswer.elements.filter(e => e.type === 'attribute').length,
-      relationships: correctAnswer.elements.filter(e => e.type === 'relationship').length,
-      // Cardinality is always double the number of relationships (From + To)
-      cardinalities: correctAnswer.elements.filter(e => e.type === 'relationship').length * 2
-    };
+    console.log('🎓 Auto-grading submission...');
+    console.log('  - Student elements:', studentElements.length);
+    console.log('  - Correct elements:', correctAnswer.elements.length);
+    console.log('  - Has rubric:', !!rubricStructured);
 
-    console.log('📊 Ground Truth:', groundTruth);
+    // ===========================
+    // STEP 1: CODE DOES THE MATH
+    // ===========================
+    const grading = calculateGrades(studentElements, correctAnswer.elements, rubricStructured);
+    
+    console.log('📊 Calculated scores:', grading._debug);
 
-    // 3. AI PROMPT - The "Teacher & Counter"
-    // We ask for COUNTS (for the code) and FEEDBACK (for the student)
-    const prompt = `You are a STRICT ERD Grading Assistant. 
+    // ===========================
+    // STEP 2: AI GENERATES FEEDBACK ONLY
+    // ===========================
+    const prompt = `You are an ERD grading feedback assistant helping students improve their database design skills.
 
-**CORRECT DATA:**
-${JSON.stringify(correctAnswer.elements)}
+**GRADING RESULTS (Already calculated - DO NOT recalculate):**
+Total Score: ${grading.totalScore} / ${grading.maxScore}
 
-**STUDENT DATA:**
-${JSON.stringify(studentElements)}
+**Category Breakdown:**
+${grading.breakdown.map(b => `- ${b.category}: ${b.earned}/${b.max} points`).join('\n')}
 
-**TASK:**
-Compare Student vs Correct data. 
-1. **Count Matches** for the "Counts" object (Logic: Semantic match is okay, e.g., "Client"=="Customer").
-2. **Write Feedback** for the "Feedback" object.
+**What the student got CORRECT:**
+${JSON.stringify(grading.correctElements, null, 2)}
 
-**COUNTING RULES (for the 'counts' object):**
-- Entities: Count correct entity names.
-- Attributes: Count correct attributes (must belong to correct Entity).
-- Relationships: Count correct relationships (must connect correct Entities).
-- Cardinality: Count EXACT matches of ends. "0..M" is NOT "1..M". (Max count = ${groundTruth.cardinalities}).
+**What the student is MISSING:**
+${JSON.stringify(grading.missingElements, null, 2)}
 
-**FEEDBACK TONE (CRITICAL):**
-- **Direct Address:** Use "You correctly identified..." or "You missed...". NOT "The student...".
-- **No Fluff:** Do not write "Let me check" or "Calculating score".
-- **Helpful & Strict:** Explain *why* something is wrong (e.g., "Advises should be 1..N because one professor advises many students").
-- **Leniency:** If you accept a synonym (e.g. Phone vs PhoneNumber), count it as correct but mention it in feedback.
-- **Overall:** If perfect, say "Excellent work! All elements are correct."
+**What the student got INCORRECT:**
+${JSON.stringify(grading.incorrectElements, null, 2)}
 
-**OUTPUT FORMAT (JSON ONLY):**
+**YOUR ONLY JOB:**
+Generate helpful, educational feedback for the student. The scores are already calculated - you just explain them in friendly language.
+
+**FEEDBACK FORMAT EXAMPLES:**
+
+CORRECT section example:
+- "You correctly identified Student, Course, and Professor entities"
+- "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses"
+
+MISSING section example:
+- "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department"
+- "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+
+INCORRECT section example:
+- "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students"
+- "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
+
+**TONE GUIDELINES:**
+- Write directly to student: "You correctly identified..." NOT "The student..."
+- Be encouraging but honest
+- Explain WHY errors matter (what functionality breaks)
+- If everything is perfect: "Excellent work! All elements are correct."
+- **DO NOT use phrases:** "Re-checking", "Adjusting score", "Confidence", "seems erroneous"
+
+**RETURN FORMAT (JSON only, no markdown, no extra text):**
 {
-  "counts": {
-    "entities_correct": Number,
-    "attributes_correct": Number,
-    "relationships_correct": Number,
-    "cardinality_correct": Number
-  },
+  "breakdown": [
+    {
+      "category": "Entities",
+      "feedback": "You correctly identified Student, Course, and Professor. Missing: Department entity is needed to organize professors by their departments."
+    },
+    {
+      "category": "Cardinality",
+      "feedback": "Most cardinalities are correct. However, the Advises relationship should be one-to-many (one professor advises multiple students), not one-to-one."
+    }
+  ],
   "feedback": {
-    "correct": ["List specific correct items..."],
-    "missing": ["List missing items..."],
-    "incorrect": ["List errors with specific advice..."]
+    "correct": [
+      "All three main entities (Student, Course, Professor) are correctly identified",
+      "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality"
+    ],
+    "missing": [
+      "Department entity - Without this, you cannot track which department each professor belongs to",
+      "Teaches relationship between Professor and Course - needed to track which professors teach which courses"
+    ],
+    "incorrect": [
+      "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students"
+    ]
   },
-  "overallComment": "One or two sentences summarizing the student's performance."
+  "overallComment": "Great work! You correctly identified 96% of the required elements. Focus on reviewing relationship cardinalities and ensure all necessary entities are included to support the required functionality."
 }`;
 
-    // 4. CALL AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -347,74 +377,281 @@ Compare Student vs Correct data.
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite-preview-09-2025', 
+        model: 'meta-llama/llama-4-scout',
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1, // Keep low for consistent counting
-        response_format: { type: "json_object" }
+        temperature: 0.7, // Higher temp for more natural, varied feedback
+        max_tokens: 2500
       })
     });
 
-    if (!aiResponse.ok) throw new Error(`OpenRouter failed: ${aiResponse.statusText}`);
-    const aiData = await aiResponse.json();
-    
-    // Clean Response
-    const cleanContent = aiData.choices[0].message.content.replace(/```json|```/g, '').trim();
-    const aiResult = JSON.parse(cleanContent);
-
-    // 5. THE ACCOUNTANT (Calculate Scores in Node.js)
-    let totalScore = 0;
-    let maxTotalScore = 0;
-    const breakdown = [];
-
-    // Helper to apply rubric weights to AI counts
-    const calculateCategory = (keyword, aiCount, totalPossible) => {
-        // Find rubric criteria matching the keyword (e.g., "Entity")
-        const criterion = rubricStructured?.criteria.find(c => c.category.toLowerCase().includes(keyword)) 
-                       || { maxPoints: 0, category: keyword }; // Fallback
-
-        const maxPoints = criterion.maxPoints || 0;
-        
-        // Math: (Matches / TotalPossible) * MaxPoints
-        const ratio = totalPossible > 0 ? (aiCount / totalPossible) : 0;
-        const earned = ratio * maxPoints;
-
-        if (maxPoints > 0) {
-            totalScore += earned;
-            maxTotalScore += maxPoints;
-            breakdown.push({
-                category: criterion.category,
-                earned: parseFloat(earned.toFixed(2)),
-                max: maxPoints,
-                // We use a simple status here, relying on the main feedback object for details
-                feedback: `Matched ${aiCount} of ${totalPossible} expected elements.`
-            });
-        }
-    };
-
-    // Calculate each section
-    calculateCategory('entit', aiResult.counts.entities_correct, groundTruth.entities);
-    calculateCategory('attribut', aiResult.counts.attributes_correct, groundTruth.attributes);
-    calculateCategory('relation', aiResult.counts.relationships_correct, groundTruth.relationships);
-    // Some rubrics combine cardinality with relationships. If separate:
-    if (rubricStructured?.criteria.some(c => c.category.toLowerCase().includes('cardinal'))) {
-        calculateCategory('cardinal', aiResult.counts.cardinality_correct, groundTruth.cardinalities);
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      throw new Error(`OpenRouter failed: ${aiResponse.statusText} - ${errorText}`);
     }
 
-    // 6. FINAL RESULT
+    const aiData = await aiResponse.json();
+    const content = aiData.choices[0].message.content;
+
+    // Clean markdown if present
+    const cleanContent = content
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
+
+    console.log('📊 AI feedback generated (first 300 chars):', cleanContent.substring(0, 300));
+
+    let feedbackData;
+    try {
+      feedbackData = JSON.parse(cleanContent);
+    } catch (parseError) {
+      console.error('❌ AI returned invalid JSON:', cleanContent);
+      // Fallback to basic feedback if AI fails
+      feedbackData = {
+        breakdown: grading.breakdown.map(b => ({
+          category: b.category,
+          feedback: `You earned ${b.earned} out of ${b.max} points in this category.`
+        })),
+        feedback: {
+          correct: Object.keys(grading.correctElements).map(k => `${k}: ${grading.correctElements[k]} correct`),
+          missing: Object.keys(grading.missingElements).flatMap(k => grading.missingElements[k]),
+          incorrect: Object.keys(grading.incorrectElements).flatMap(k => grading.incorrectElements[k])
+        },
+        overallComment: `You scored ${grading.totalScore} out of ${grading.maxScore} points.`
+      };
+    }
+
+    // ===========================
+    // STEP 3: MERGE CODE MATH + AI FEEDBACK
+    // ===========================
     const finalResult = {
-        totalScore: parseFloat(totalScore.toFixed(2)),
-        maxScore: maxTotalScore || 100, 
-        breakdown: breakdown,
-        // We use the AI's high-quality text feedback here
-        feedback: aiResult.feedback, 
-        overallComment: aiResult.overallComment
+      totalScore: grading.totalScore,
+      maxScore: grading.maxScore,
+      breakdown: grading.breakdown.map((item, i) => ({
+        category: item.category,
+        earned: item.earned,
+        max: item.max,
+        feedback: feedbackData.breakdown[i]?.feedback || `You earned ${item.earned}/${item.max} points.`
+      })),
+      feedback: feedbackData.feedback,
+      overallComment: feedbackData.overallComment,
+      _debug: grading._debug // For troubleshooting
     };
 
-    console.log(`✅ Graded: ${finalResult.totalScore}/${finalResult.maxScore}`);
+    console.log('✅ Auto-grading complete:', finalResult.totalScore, '/', finalResult.maxScore);
     return res.status(200).json(finalResult);
 
   } catch (error) {
     console.error('❌ Auto-grading error:', error);
-    return res.status(500).json({ error: 'Auto-grading failed', message: error.message });
+    
+    return res.status(500).json({ 
+      error: 'Auto-grading failed',
+      message: error.message
+    });
   }
 });
+
+// ===========================
+// DETERMINISTIC GRADING FUNCTION
+// ===========================
+function calculateGrades(studentElements, correctElements, rubric) {
+  const result = {
+    totalScore: 0,
+    maxScore: rubric.totalPoints,
+    breakdown: [],
+    correctElements: {},
+    missingElements: {},
+    incorrectElements: {},
+    _debug: {}
+  };
+
+  // Check if lenient naming is enabled
+  const hasLenientNaming = rubric.criteria.some(c => 
+    c.description.toLowerCase().includes('lenient') || 
+    c.description.toLowerCase().includes('semantic')
+  );
+
+  rubric.criteria.forEach(criterion => {
+    const { category, maxPoints, description } = criterion;
+    
+    // Parse multiplier from description (e.g., "0.5 x 16" -> multiplier=0.5, expected=16)
+    const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
+    const multiplier = multiplierMatch ? parseFloat(multiplierMatch[1]) : 1;
+    const expectedCount = multiplierMatch ? parseInt(multiplierMatch[2]) : 0;
+
+    let correctCount = 0;
+    let missing = [];
+    let incorrect = [];
+    let correctItems = [];
+
+    const categoryLower = category.toLowerCase();
+
+    // ===========================
+    // ENTITY MATCHING
+    // ===========================
+    if (categoryLower.includes('entit')) {
+      const correctEntities = correctElements.filter(e => e.type === 'entity');
+      const studentEntities = studentElements.filter(e => e.type === 'entity');
+      
+      correctEntities.forEach(ce => {
+        const match = studentEntities.find(se => {
+          const nameMatch = hasLenientNaming 
+            ? normalizeString(se.name) === normalizeString(ce.name)
+            : se.name === ce.name;
+          return nameMatch && se.subType === ce.subType;
+        });
+        
+        if (match) {
+          correctCount++;
+          correctItems.push(ce.name);
+        } else {
+          missing.push(ce.name);
+        }
+      });
+    }
+
+    // ===========================
+    // ATTRIBUTE MATCHING
+    // ===========================
+    else if (categoryLower.includes('attribute')) {
+      const correctAttrs = correctElements.filter(e => e.type === 'attribute');
+      const studentAttrs = studentElements.filter(e => e.type === 'attribute');
+      
+      correctAttrs.forEach(ca => {
+        const match = studentAttrs.find(sa => {
+          const nameMatch = hasLenientNaming 
+            ? normalizeString(sa.name) === normalizeString(ca.name)
+            : sa.name === ca.name;
+          return nameMatch && sa.subType === ca.subType && sa.belongsTo === ca.belongsTo;
+        });
+        
+        if (match) {
+          correctCount++;
+          correctItems.push(`${ca.name} (${ca.belongsTo})`);
+        } else {
+          missing.push(`${ca.name} in ${ca.belongsTo}`);
+        }
+      });
+    }
+
+    // ===========================
+    // PRIMARY KEY MATCHING
+    // ===========================
+    else if (categoryLower.includes('primary') || categoryLower.includes('key')) {
+      const correctPKs = correctElements.filter(e => e.type === 'attribute' && e.subType === 'primary_key');
+      const studentPKs = studentElements.filter(e => e.type === 'attribute' && e.subType === 'primary_key');
+      
+      correctPKs.forEach(cpk => {
+        const match = studentPKs.find(spk => {
+          const nameMatch = hasLenientNaming 
+            ? normalizeString(spk.name) === normalizeString(cpk.name)
+            : spk.name === cpk.name;
+          return nameMatch && spk.belongsTo === cpk.belongsTo;
+        });
+        
+        if (match) {
+          correctCount++;
+          correctItems.push(`${cpk.name} (${cpk.belongsTo})`);
+        } else {
+          missing.push(`${cpk.name} as primary key in ${cpk.belongsTo}`);
+        }
+      });
+    }
+
+    // ===========================
+    // RELATIONSHIP MATCHING
+    // ===========================
+    else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
+      const correctRels = correctElements.filter(e => e.type === 'relationship');
+      const studentRels = studentElements.filter(e => e.type === 'relationship');
+      
+      correctRels.forEach(cr => {
+        const match = studentRels.find(sr => {
+          const nameMatch = hasLenientNaming 
+            ? normalizeString(sr.name) === normalizeString(cr.name)
+            : sr.name === cr.name;
+          return nameMatch && sr.from === cr.from && sr.to === cr.to;
+        });
+        
+        if (match) {
+          correctCount++;
+          correctItems.push(`${cr.name} (${cr.from} → ${cr.to})`);
+        } else {
+          missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
+        }
+      });
+    }
+
+    // ===========================
+    // CARDINALITY MATCHING (STRICT)
+    // ===========================
+    else if (categoryLower.includes('cardinality')) {
+      const correctRels = correctElements.filter(e => e.type === 'relationship');
+      const studentRels = studentElements.filter(e => e.type === 'relationship');
+      
+      correctRels.forEach(cr => {
+        const sr = studentRels.find(s => {
+          const nameMatch = hasLenientNaming 
+            ? normalizeString(s.name) === normalizeString(cr.name)
+            : s.name === cr.name;
+          return nameMatch;
+        });
+        
+        if (sr) {
+          // Check cardinalityFrom
+          if (sr.cardinalityFrom === cr.cardinalityFrom) {
+            correctCount++;
+            correctItems.push(`${cr.name}.cardinalityFrom (${cr.cardinalityFrom})`);
+          } else {
+            incorrect.push(`${cr.name}.cardinalityFrom: expected "${cr.cardinalityFrom}", got "${sr.cardinalityFrom}"`);
+          }
+          
+          // Check cardinalityTo
+          if (sr.cardinalityTo === cr.cardinalityTo) {
+            correctCount++;
+            correctItems.push(`${cr.name}.cardinalityTo (${cr.cardinalityTo})`);
+          } else {
+            incorrect.push(`${cr.name}.cardinalityTo: expected "${cr.cardinalityTo}", got "${sr.cardinalityTo}"`);
+          }
+        } else {
+          missing.push(`${cr.name} relationship (both cardinalities)`);
+        }
+      });
+    }
+
+    // Calculate earned points
+    const earned = Math.min(correctCount * multiplier, maxPoints);
+    
+    result.breakdown.push({
+      category,
+      earned: parseFloat(earned.toFixed(2)),
+      max: maxPoints,
+      feedback: '' // AI will fill this
+    });
+
+    result.totalScore += earned;
+    result.correctElements[category] = correctItems;
+    result.missingElements[category] = missing;
+    result.incorrectElements[category] = incorrect;
+    
+    result._debug[category] = {
+      calculation: `${correctCount} correct × ${multiplier} = ${earned} (max: ${maxPoints})`,
+      expectedCount,
+      correctCount,
+      multiplier,
+      correctItems,
+      missing,
+      incorrect
+    };
+  });
+
+  result.totalScore = parseFloat(result.totalScore.toFixed(2));
+  return result;
+}
+
+// Helper function for lenient name matching
+function normalizeString(str) {
+  return str.toLowerCase()
+    .replace(/[_\s-]/g, '') // Remove underscores, spaces, hyphens
+    .replace(/number/g, 'num') // phone_number = phoneNum
+    .replace(/id/g, ''); // studentID = student
+}
