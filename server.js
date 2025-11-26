@@ -309,63 +309,43 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
 **YOUR TASK:**
-1. Check domain match first (if different domain → 0 points)
-2. Count exact matches per category:
-   - Entities: name + subType match
-   - Attributes: name + subType + belongsTo match
-   - Relationships: name + from + to match
-   - Cardinality: count individual components (cardinalityFrom + cardinalityTo per relationship)
-3. Calculate points: (Correct count) × (Rubric multiplier per element)
-4. Write feedback TO STUDENT using element names only.
+1. Compare Student vs Correct elements.
+2. Calculate scores based on the Rubric multipliers.
+3. **Internal Step:** Perform the math validation for the "_grading_debug" object.
+4. Generate the final JSON.
 
-**CARDINALITY SCORING - CRITICAL:**
-- Each relationship has 2 cardinality components: cardinalityFrom and cardinalityTo.
-- **Count EXACT matches only:** "0..M" ≠ "1..M" (This is WRONG).
-- Formula: (Count of correct components) × (Points per component).
-- Do not round up.
+**CARDINALITY SCORING:**
+- Count EXACT matches only ("0..M" ≠ "1..M").
+- Math: (Count of correct components) × (Points per component).
 
-**NAMING LENIENCY:**
-${rubricStructured?.criteria.some(c => c.description.toLowerCase().includes('lenient')) 
-  ? '- Rubric allows semantic naming (e.g., "phone" = "phoneNumber"). Do not deduct points.'
-  : '- Rubric requires EXACT naming. Deduct points for mismatches.'}
+**FEEDBACK TONE:**
+- Direct to student: "You correctly identified..."
+- Concise. No "Re-checking" or "Adjusting score" text.
 
-**FEEDBACK TONE (STRICTLY FOLLOW):**
-- Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
-- Be concise, no self-corrections or recalculations in the feedback text.
-- If everything is perfect, just say: "Excellent work! All elements are correct."
-- DO NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score".
-
-**RETURN FORMAT:**
-Return ONLY valid JSON. 
-**CRITICAL:** You must fill the "_grading_debug" object FIRST. This is for the developer to check your math. 
-The "feedback" object must follow the tone instructions above.
+**OUTPUT FORMAT - CRITICAL:**
+- **DO NOT** output any conversational text, steps, or markdown (no \`\`\`json tags).
+- **Start your response IMMEDIATELY with {**
+- The response must be a single, valid JSON object.
 
 {
   "_grading_debug": {
-    "cardinality_calculation": "Show the math. Ex: 'Found 13 correct ends. Rubric is 0.5pts. 13 * 0.5 = 6.5'",
-    "cardinality_errors": "List specific mismatches. Ex: 'Student has 1..N, Correct is 0..N for Enrolls'",
-    "naming_adjustments": "List any lenient matches allowed"
+    "math_logic": "Show the calculation here. Ex: 13 correct * 0.5 = 6.5",
+    "errors": "List specific mismatches here."
   },
   "totalScore": Number,
-  "maxScore": ${rubricStructured?.totalPoints || 100},
+  "maxScore": Number,
   "breakdown": [
-    {"category": "Entities", "earned": Number, "max": Number, "feedback": "String..."},
-    {"category": "Relationships", "earned": Number, "max": Number, "feedback": "String..."},
-    {"category": "Attributes", "earned": Number, "max": Number, "feedback": "String..."}
+    {"category": "String", "earned": Number, "max": Number, "feedback": "String"}
   ],
   "feedback": {
-    "correct": ["String", "String"],
-    "missing": ["String", "String"],
-    "incorrect": ["String", "String"]
+    "correct": [],
+    "missing": [],
+    "incorrect": []
   },
   "overallComment": "String"
 }
-
-**FINAL CHECKS:**
-- **totalScore CANNOT EXCEED maxScore**
-- **Earned points per category CANNOT EXCEED max points for that category**
-- Return ONLY valid JSON, no markdown.
 `;
+
     // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
