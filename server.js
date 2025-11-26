@@ -273,7 +273,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// 🆕 Auto-grading endpoint (HYBRID APPROACH)
+// 🆕 Auto-grading endpoint (HYBRID APPROACH - FLEXIBLE)
 app.post('/autograde-erd', async (req, res) => {
   try {
     const { studentElements, correctAnswer, rubricStructured } = req.body;
@@ -379,7 +379,7 @@ INCORRECT section example:
       body: JSON.stringify({
         model: 'meta-llama/llama-4-scout',
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7, // Higher temp for more natural, varied feedback
+        temperature: 0.7,
         max_tokens: 2500
       })
     });
@@ -392,7 +392,6 @@ INCORRECT section example:
     const aiData = await aiResponse.json();
     const content = aiData.choices[0].message.content;
 
-    // Clean markdown if present
     const cleanContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
@@ -405,7 +404,6 @@ INCORRECT section example:
       feedbackData = JSON.parse(cleanContent);
     } catch (parseError) {
       console.error('❌ AI returned invalid JSON:', cleanContent);
-      // Fallback to basic feedback if AI fails
       feedbackData = {
         breakdown: grading.breakdown.map(b => ({
           category: b.category,
@@ -434,7 +432,7 @@ INCORRECT section example:
       })),
       feedback: feedbackData.feedback,
       overallComment: feedbackData.overallComment,
-      _debug: grading._debug // For troubleshooting
+      _debug: grading._debug
     };
 
     console.log('✅ Auto-grading complete:', finalResult.totalScore, '/', finalResult.maxScore);
@@ -451,7 +449,7 @@ INCORRECT section example:
 });
 
 // ===========================
-// DETERMINISTIC GRADING FUNCTION
+// DETERMINISTIC GRADING FUNCTION (FLEXIBLE CARDINALITY)
 // ===========================
 function calculateGrades(studentElements, correctElements, rubric) {
   const result = {
@@ -464,7 +462,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
     _debug: {}
   };
 
-  // Check if lenient naming is enabled
   const hasLenientNaming = rubric.criteria.some(c => 
     c.description.toLowerCase().includes('lenient') || 
     c.description.toLowerCase().includes('semantic')
@@ -473,10 +470,14 @@ function calculateGrades(studentElements, correctElements, rubric) {
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
     
-    // Parse multiplier from description (e.g., "0.5 x 16" -> multiplier=0.5, expected=16)
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
-    const multiplier = multiplierMatch ? parseFloat(multiplierMatch[1]) : 1;
-    const expectedCount = multiplierMatch ? parseInt(multiplierMatch[2]) : 0;
+    let multiplier = 1;
+    let expectedCount = 0;
+    
+    if (multiplierMatch) {
+      multiplier = parseFloat(multiplierMatch[1]);
+      expectedCount = parseInt(multiplierMatch[2]);
+    }
 
     let correctCount = 0;
     let missing = [];
@@ -491,6 +492,8 @@ function calculateGrades(studentElements, correctElements, rubric) {
     if (categoryLower.includes('entit')) {
       const correctEntities = correctElements.filter(e => e.type === 'entity');
       const studentEntities = studentElements.filter(e => e.type === 'entity');
+      
+      if (!multiplierMatch) expectedCount = correctEntities.length;
       
       correctEntities.forEach(ce => {
         const match = studentEntities.find(se => {
@@ -516,6 +519,8 @@ function calculateGrades(studentElements, correctElements, rubric) {
       const correctAttrs = correctElements.filter(e => e.type === 'attribute');
       const studentAttrs = studentElements.filter(e => e.type === 'attribute');
       
+      if (!multiplierMatch) expectedCount = correctAttrs.length;
+      
       correctAttrs.forEach(ca => {
         const match = studentAttrs.find(sa => {
           const nameMatch = hasLenientNaming 
@@ -540,11 +545,13 @@ function calculateGrades(studentElements, correctElements, rubric) {
       const correctPKs = correctElements.filter(e => e.type === 'attribute' && e.subType === 'primary_key');
       const studentPKs = studentElements.filter(e => e.type === 'attribute' && e.subType === 'primary_key');
       
+      if (!multiplierMatch) expectedCount = correctPKs.length;
+      
       correctPKs.forEach(cpk => {
         const match = studentPKs.find(spk => {
           const nameMatch = hasLenientNaming 
             ? normalizeString(spk.name) === normalizeString(cpk.name)
-            : spk.name === cpk.name;
+            : cpk.name === cpk.name;
           return nameMatch && spk.belongsTo === cpk.belongsTo;
         });
         
@@ -564,6 +571,8 @@ function calculateGrades(studentElements, correctElements, rubric) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
       const studentRels = studentElements.filter(e => e.type === 'relationship');
       
+      if (!multiplierMatch) expectedCount = correctRels.length;
+      
       correctRels.forEach(cr => {
         const match = studentRels.find(sr => {
           const nameMatch = hasLenientNaming 
@@ -582,40 +591,146 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // CARDINALITY MATCHING (STRICT)
+    // 🔧 CARDINALITY MATCHING - AUTO-DETECT MODE
     // ===========================
     else if (categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
       const studentRels = studentElements.filter(e => e.type === 'relationship');
       
-      correctRels.forEach(cr => {
-        const sr = studentRels.find(s => {
-          const nameMatch = hasLenientNaming 
-            ? normalizeString(s.name) === normalizeString(cr.name)
-            : s.name === cr.name;
-          return nameMatch;
-        });
+      // Auto-detect grading mode based on expectedCount
+      const relationshipCount = correctRels.length;
+      const checksPerRelationship = expectedCount / relationshipCount;
+      
+      console.log(`🔍 Cardinality mode detection: ${expectedCount} checks / ${relationshipCount} relationships = ${checksPerRelationship} checks per relationship`);
+      
+      // OPTION A: Grade as whole cardinality (from + to) = 2 checks per relationship
+      if (checksPerRelationship === 2) {
+        console.log('✅ Using OPTION A: Whole cardinality grading (from + to)');
         
-        if (sr) {
-          // Check cardinalityFrom
-          if (sr.cardinalityFrom === cr.cardinalityFrom) {
-            correctCount++;
-            correctItems.push(`${cr.name}.cardinalityFrom (${cr.cardinalityFrom})`);
-          } else {
-            incorrect.push(`${cr.name}.cardinalityFrom: expected "${cr.cardinalityFrom}", got "${sr.cardinalityFrom}"`);
-          }
+        correctRels.forEach(cr => {
+          const sr = studentRels.find(s => {
+            const nameMatch = hasLenientNaming 
+              ? normalizeString(s.name) === normalizeString(cr.name)
+              : s.name === cr.name;
+            return nameMatch;
+          });
           
-          // Check cardinalityTo
-          if (sr.cardinalityTo === cr.cardinalityTo) {
-            correctCount++;
-            correctItems.push(`${cr.name}.cardinalityTo (${cr.cardinalityTo})`);
+          if (sr) {
+            // Check cardinalityFrom as whole string
+            if (sr.cardinalityFrom === cr.cardinalityFrom) {
+              correctCount++;
+              correctItems.push(`${cr.name}.from (${cr.cardinalityFrom})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityFrom: expected "${cr.cardinalityFrom}", got "${sr.cardinalityFrom}"`);
+            }
+            
+            // Check cardinalityTo as whole string
+            if (sr.cardinalityTo === cr.cardinalityTo) {
+              correctCount++;
+              correctItems.push(`${cr.name}.to (${cr.cardinalityTo})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityTo: expected "${cr.cardinalityTo}", got "${sr.cardinalityTo}"`);
+            }
           } else {
-            incorrect.push(`${cr.name}.cardinalityTo: expected "${cr.cardinalityTo}", got "${sr.cardinalityTo}"`);
+            missing.push(`${cr.name} relationship (both from and to cardinality missing)`);
           }
-        } else {
-          missing.push(`${cr.name} relationship (both cardinalities)`);
-        }
-      });
+        });
+      }
+      
+      // OPTION B: Grade min/max separately = 4 checks per relationship
+      else if (checksPerRelationship === 4) {
+        console.log('✅ Using OPTION B: Min/Max split grading');
+        
+        correctRels.forEach(cr => {
+          const sr = studentRels.find(s => {
+            const nameMatch = hasLenientNaming 
+              ? normalizeString(s.name) === normalizeString(cr.name)
+              : s.name === cr.name;
+            return nameMatch;
+          });
+          
+          if (sr) {
+            // Split cardinalityFrom into min..max
+            const [correctFromMin, correctFromMax] = (cr.cardinalityFrom || '').split('..');
+            const [studentFromMin, studentFromMax] = (sr.cardinalityFrom || '').split('..');
+            
+            // Check FROM - Min
+            if (studentFromMin === correctFromMin) {
+              correctCount++;
+              correctItems.push(`${cr.name}.from.min (${correctFromMin})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityFrom.min: expected "${correctFromMin}", got "${studentFromMin}"`);
+            }
+            
+            // Check FROM - Max
+            if (studentFromMax === correctFromMax) {
+              correctCount++;
+              correctItems.push(`${cr.name}.from.max (${correctFromMax})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityFrom.max: expected "${correctFromMax}", got "${studentFromMax}"`);
+            }
+            
+            // Split cardinalityTo into min..max
+            const [correctToMin, correctToMax] = (cr.cardinalityTo || '').split('..');
+            const [studentToMin, studentToMax] = (sr.cardinalityTo || '').split('..');
+            
+            // Check TO - Min
+            if (studentToMin === correctToMin) {
+              correctCount++;
+              correctItems.push(`${cr.name}.to.min (${correctToMin})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityTo.min: expected "${correctToMin}", got "${studentToMin}"`);
+            }
+            
+            // Check TO - Max
+            if (studentToMax === correctToMax) {
+              correctCount++;
+              correctItems.push(`${cr.name}.to.max (${correctToMax})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityTo.max: expected "${correctToMax}", got "${studentToMax}"`);
+            }
+          } else {
+            missing.push(`${cr.name} relationship (all 4 cardinality parts missing)`);
+          }
+        });
+      }
+      
+      // FALLBACK: Unexpected checks per relationship
+      else {
+        console.warn(`⚠️ Unexpected cardinality checks: ${checksPerRelationship} per relationship. Defaulting to Option A.`);
+        
+        correctRels.forEach(cr => {
+          const sr = studentRels.find(s => {
+            const nameMatch = hasLenientNaming 
+              ? normalizeString(s.name) === normalizeString(cr.name)
+              : s.name === cr.name;
+            return nameMatch;
+          });
+          
+          if (sr) {
+            if (sr.cardinalityFrom === cr.cardinalityFrom) {
+              correctCount++;
+              correctItems.push(`${cr.name}.from (${cr.cardinalityFrom})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityFrom: expected "${cr.cardinalityFrom}", got "${sr.cardinalityFrom}"`);
+            }
+            
+            if (sr.cardinalityTo === cr.cardinalityTo) {
+              correctCount++;
+              correctItems.push(`${cr.name}.to (${cr.cardinalityTo})`);
+            } else {
+              incorrect.push(`${cr.name}.cardinalityTo: expected "${cr.cardinalityTo}", got "${sr.cardinalityTo}"`);
+            }
+          } else {
+            missing.push(`${cr.name} relationship (both from and to cardinality missing)`);
+          }
+        });
+      }
+    }
+
+    // Calculate multiplier if not from description
+    if (!multiplierMatch && expectedCount > 0) {
+      multiplier = maxPoints / expectedCount;
     }
 
     // Calculate earned points
@@ -625,7 +740,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
       category,
       earned: parseFloat(earned.toFixed(2)),
       max: maxPoints,
-      feedback: '' // AI will fill this
+      feedback: ''
     });
 
     result.totalScore += earned;
@@ -634,10 +749,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
     result.incorrectElements[category] = incorrect;
     
     result._debug[category] = {
-      calculation: `${correctCount} correct × ${multiplier} = ${earned} (max: ${maxPoints})`,
+      calculation: `${correctCount} correct × ${multiplier.toFixed(3)} = ${earned.toFixed(2)} (max: ${maxPoints})`,
       expectedCount,
       correctCount,
-      multiplier,
+      multiplier: parseFloat(multiplier.toFixed(3)),
       correctItems,
       missing,
       incorrect
@@ -648,10 +763,9 @@ function calculateGrades(studentElements, correctElements, rubric) {
   return result;
 }
 
-// Helper function for lenient name matching
 function normalizeString(str) {
   return str.toLowerCase()
-    .replace(/[_\s-]/g, '') // Remove underscores, spaces, hyphens
-    .replace(/number/g, 'num') // phone_number = phoneNum
-    .replace(/id/g, ''); // studentID = student
+    .replace(/[_\s-]/g, '')
+    .replace(/number/g, 'num')
+    .replace(/id/g, '');
 }
