@@ -273,80 +273,73 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// 🆕 Auto-grading endpoint
+// 🆕 Auto-grading endpoint (Hybrid: Code does Math, AI does Feedback)
 app.post('/autograde-erd', async (req, res) => {
   try {
     const { studentElements, correctAnswer, rubricStructured } = req.body;
 
-    // Validate inputs
+    // 1. VALIDATION
     if (!studentElements || !correctAnswer || !correctAnswer.elements) {
-      return res.status(400).json({ 
-        error: 'Missing required data',
-        message: 'Need studentElements, correctAnswer, and rubricStructured'
-      });
+      return res.status(400).json({ error: 'Missing required data' });
     }
 
-    console.log('🎓 Auto-grading submission...');
-    console.log('  - Student elements:', studentElements.length);
-    console.log('  - Correct elements:', correctAnswer.elements.length);
-    console.log('  - Has rubric:', !!rubricStructured);
+    // 2. GROUND TRUTH (The Denominators)
+    // We calculate exactly how many items exist in the correct answer.
+    const groundTruth = {
+      entities: correctAnswer.elements.filter(e => e.type === 'entity').length,
+      attributes: correctAnswer.elements.filter(e => e.type === 'attribute').length,
+      relationships: correctAnswer.elements.filter(e => e.type === 'relationship').length,
+      // Cardinality is always double the number of relationships (From + To)
+      cardinalities: correctAnswer.elements.filter(e => e.type === 'relationship').length * 2
+    };
 
-    // Build comprehensive comparison prompt
-// OPTIMIZATION: Send minified JSON to save input tokens (approx 20% savings)
-// The AI reads computer-JSON better than human-formatted JSON anyway.
-const prompt = `You are a STRICT ERD grading assistant.
+    console.log('📊 Ground Truth:', groundTruth);
 
-**CORRECT ANSWER:**
+    // 3. AI PROMPT - The "Teacher & Counter"
+    // We ask for COUNTS (for the code) and FEEDBACK (for the student)
+    const prompt = `You are a STRICT ERD Grading Assistant. 
+
+**CORRECT DATA:**
 ${JSON.stringify(correctAnswer.elements)}
 
-**STUDENT'S SUBMISSION:**
+**STUDENT DATA:**
 ${JSON.stringify(studentElements)}
 
-${rubricStructured ? `**GRADING RUBRIC:**
-Total Points: ${rubricStructured.totalPoints}
-Criteria:
-${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - ${c.description}`).join('\n')}
-` : '**No rubric provided. Use standard ERD grading criteria.**'}
+**TASK:**
+Compare Student vs Correct data. 
+1. **Count Matches** for the "Counts" object (Logic: Semantic match is okay, e.g., "Client"=="Customer").
+2. **Write Feedback** for the "Feedback" object.
 
-**YOUR TASK:**
-1. Compare Student vs Correct elements.
-2. Calculate scores based on the Rubric multipliers.
-3. **Internal Step:** Perform the math validation for the "_grading_debug" object.
-4. Generate the final JSON.
+**COUNTING RULES (for the 'counts' object):**
+- Entities: Count correct entity names.
+- Attributes: Count correct attributes (must belong to correct Entity).
+- Relationships: Count correct relationships (must connect correct Entities).
+- Cardinality: Count EXACT matches of ends. "0..M" is NOT "1..M". (Max count = ${groundTruth.cardinalities}).
 
-**CARDINALITY SCORING:**
-- Count EXACT matches only ("0..M" ≠ "1..M").
-- Math: (Count of correct components) × (Points per component).
+**FEEDBACK TONE (CRITICAL):**
+- **Direct Address:** Use "You correctly identified..." or "You missed...". NOT "The student...".
+- **No Fluff:** Do not write "Let me check" or "Calculating score".
+- **Helpful & Strict:** Explain *why* something is wrong (e.g., "Advises should be 1..N because one professor advises many students").
+- **Leniency:** If you accept a synonym (e.g. Phone vs PhoneNumber), count it as correct but mention it in feedback.
+- **Overall:** If perfect, say "Excellent work! All elements are correct."
 
-**FEEDBACK TONE:**
-- Direct to student: "You correctly identified..."
-- Concise. No "Re-checking" or "Adjusting score" text.
-
-**OUTPUT FORMAT - CRITICAL:**
-- **DO NOT** output any conversational text, steps, or markdown (no \`\`\`json tags).
-- **Start your response IMMEDIATELY with {**
-- The response must be a single, valid JSON object.
-
+**OUTPUT FORMAT (JSON ONLY):**
 {
-  "_grading_debug": {
-    "math_logic": "Show the calculation here. Ex: 13 correct * 0.5 = 6.5",
-    "errors": "List specific mismatches here."
+  "counts": {
+    "entities_correct": Number,
+    "attributes_correct": Number,
+    "relationships_correct": Number,
+    "cardinality_correct": Number
   },
-  "totalScore": Number,
-  "maxScore": Number,
-  "breakdown": [
-    {"category": "String", "earned": Number, "max": Number, "feedback": "String"}
-  ],
   "feedback": {
-    "correct": [],
-    "missing": [],
-    "incorrect": []
+    "correct": ["List specific correct items..."],
+    "missing": ["List missing items..."],
+    "incorrect": ["List errors with specific advice..."]
   },
-  "overallComment": "String"
-}
-`;
+  "overallComment": "One or two sentences summarizing the student's performance."
+}`;
 
-    // Call OpenRouter AI
+    // 4. CALL AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -354,70 +347,74 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout',
-        messages: [{
-          role: 'user',
-          content: prompt
-        }],
-        temperature: 0.2, // Lower temp for consistent grading
-        max_tokens: 3000
+        model: 'google/gemini-2.5-flash-lite-preview-09-2025', 
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1, // Keep low for consistent counting
+        response_format: { type: "json_object" }
       })
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      throw new Error(`OpenRouter failed: ${aiResponse.statusText} - ${errorText}`);
-    }
-
+    if (!aiResponse.ok) throw new Error(`OpenRouter failed: ${aiResponse.statusText}`);
     const aiData = await aiResponse.json();
-    const content = aiData.choices[0].message.content;
+    
+    // Clean Response
+    const cleanContent = aiData.choices[0].message.content.replace(/```json|```/g, '').trim();
+    const aiResult = JSON.parse(cleanContent);
 
-    // Clean markdown if present
-    const cleanContent = content
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
+    // 5. THE ACCOUNTANT (Calculate Scores in Node.js)
+    let totalScore = 0;
+    let maxTotalScore = 0;
+    const breakdown = [];
 
-    // 🔍 DEBUG LOGGING - See what AI actually returned
-    console.log('📊 Raw AI response (first 500 chars):', cleanContent.substring(0, 500));
+    // Helper to apply rubric weights to AI counts
+    const calculateCategory = (keyword, aiCount, totalPossible) => {
+        // Find rubric criteria matching the keyword (e.g., "Entity")
+        const criterion = rubricStructured?.criteria.find(c => c.category.toLowerCase().includes(keyword)) 
+                       || { maxPoints: 0, category: keyword }; // Fallback
 
-    let result;
-    try {
-      result = JSON.parse(cleanContent);
-      
-      // 🔍 DEBUG LOGGING - See parsed structure
-      console.log('📊 Parsed structure:', JSON.stringify(result, null, 2));
-      console.log('  - Has totalScore?', typeof result.totalScore, '=', result.totalScore);
-      console.log('  - Has breakdown?', Array.isArray(result.breakdown), '=', result.breakdown?.length);
-      console.log('  - Has feedback?', typeof result.feedback, '=', Object.keys(result.feedback || {}).length);
-      
-    } catch (parseError) {
-      console.error('❌ JSON Parse Error:', parseError.message);
-      console.error('Content that failed to parse:', cleanContent);
-      throw new Error('AI returned invalid JSON format');
+        const maxPoints = criterion.maxPoints || 0;
+        
+        // Math: (Matches / TotalPossible) * MaxPoints
+        const ratio = totalPossible > 0 ? (aiCount / totalPossible) : 0;
+        const earned = ratio * maxPoints;
+
+        if (maxPoints > 0) {
+            totalScore += earned;
+            maxTotalScore += maxPoints;
+            breakdown.push({
+                category: criterion.category,
+                earned: parseFloat(earned.toFixed(2)),
+                max: maxPoints,
+                // We use a simple status here, relying on the main feedback object for details
+                feedback: `Matched ${aiCount} of ${totalPossible} expected elements.`
+            });
+        }
+    };
+
+    // Calculate each section
+    calculateCategory('entit', aiResult.counts.entities_correct, groundTruth.entities);
+    calculateCategory('attribut', aiResult.counts.attributes_correct, groundTruth.attributes);
+    calculateCategory('relation', aiResult.counts.relationships_correct, groundTruth.relationships);
+    // Some rubrics combine cardinality with relationships. If separate:
+    if (rubricStructured?.criteria.some(c => c.category.toLowerCase().includes('cardinal'))) {
+        calculateCategory('cardinal', aiResult.counts.cardinality_correct, groundTruth.cardinalities);
     }
 
-    // Validate result structure (improved validation)
-    if (typeof result.totalScore === 'undefined' || 
-        !Array.isArray(result.breakdown) || 
-        typeof result.feedback !== 'object') {
-      console.error('❌ Validation failed. Missing fields:', {
-        hasTotalScore: typeof result.totalScore !== 'undefined',
-        hasBreakdown: Array.isArray(result.breakdown),
-        hasFeedback: typeof result.feedback === 'object'
-      });
-      throw new Error('AI response missing required fields');
-    }
+    // 6. FINAL RESULT
+    const finalResult = {
+        totalScore: parseFloat(totalScore.toFixed(2)),
+        maxScore: maxTotalScore || 100, 
+        breakdown: breakdown,
+        // We use the AI's high-quality text feedback here
+        feedback: aiResult.feedback, 
+        overallComment: aiResult.overallComment
+    };
 
-    console.log('✅ Auto-grading complete:', result.totalScore, '/', result.maxScore);
-    return res.status(200).json(result);
+    console.log(`✅ Graded: ${finalResult.totalScore}/${finalResult.maxScore}`);
+    return res.status(200).json(finalResult);
 
   } catch (error) {
     console.error('❌ Auto-grading error:', error);
-    
-    return res.status(500).json({ 
-      error: 'Auto-grading failed',
-      message: error.message
-    });
+    return res.status(500).json({ error: 'Auto-grading failed', message: error.message });
   }
 });
