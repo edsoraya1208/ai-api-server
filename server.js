@@ -292,13 +292,15 @@ app.post('/autograde-erd', async (req, res) => {
     console.log('  - Has rubric:', !!rubricStructured);
 
     // Build comprehensive comparison prompt
-    const prompt = `You are a STRICT ERD grading assistant.
+// OPTIMIZATION: Send minified JSON to save input tokens (approx 20% savings)
+// The AI reads computer-JSON better than human-formatted JSON anyway.
+const prompt = `You are a STRICT ERD grading assistant.
 
-**CORRECT ANSWER (What lecturer expects):**
-${JSON.stringify(correctAnswer.elements, null, 2)}
+**CORRECT ANSWER:**
+${JSON.stringify(correctAnswer.elements)}
 
 **STUDENT'S SUBMISSION:**
-${JSON.stringify(studentElements, null, 2)}
+${JSON.stringify(studentElements)}
 
 ${rubricStructured ? `**GRADING RUBRIC:**
 Total Points: ${rubricStructured.totalPoints}
@@ -307,83 +309,62 @@ ${rubricStructured.criteria.map(c => `- ${c.category}: ${c.maxPoints} points - $
 ` : '**No rubric provided. Use standard ERD grading criteria.**'}
 
 **YOUR TASK:**
-
 1. Check domain match first (if different domain → 0 points)
-
 2. Count exact matches per category:
    - Entities: name + subType match
    - Attributes: name + subType + belongsTo match
-   - Primary keys: attributes with subType="primary_key" match
    - Relationships: name + from + to match
    - Cardinality: count individual components (cardinalityFrom + cardinalityTo per relationship)
-
 3. Calculate points: (Correct count) × (Rubric multiplier per element)
-   - Find multiplier from rubric description (e.g., "0.5 x 16" means 0.5 per element)
-   - Multiply correct count by multiplier to get earned points
-
-4. Write feedback TO STUDENT using element names only
+4. Write feedback TO STUDENT using element names only.
 
 **CARDINALITY SCORING - CRITICAL:**
-- Each relationship has 2 cardinality components: cardinalityFrom and cardinalityTo
-- Count EXACT matches only: "0..M" ≠ "1..M" = WRONG
-- Use rubric multiplier to calculate: (Correct components) × (Points per component)
-
-**Examples (PLEASE LOOK CAREFULLY AND UNDERSTAND THIS PROMPT - SUPER CRITICAL):**
-- Rubric says "0.5 x 16 = 8 points", student gets 15/16 correct → 15 × 0.5 = 7.5 points
-- Rubric says "1 x 8 = 8 points", student gets 6/8 correct → 6 × 1 = 6 points
-
-⚠️ **NEVER give full Cardinality points if ANY component is wrong, dont under-grade or over-grade, FOLLOW EACTLY THE INSTRUCTION**
+- Each relationship has 2 cardinality components: cardinalityFrom and cardinalityTo.
+- **Count EXACT matches only:** "0..M" ≠ "1..M" (This is WRONG).
+- Formula: (Count of correct components) × (Points per component).
+- Do not round up.
 
 **NAMING LENIENCY:**
-${rubricStructured?.criteria.some(c => c.description.toLowerCase().includes('lenient') || c.description.toLowerCase().includes('semantic')) 
-  ? '- Rubric allows semantic/lenient naming: "phone" = "phone_number" = "phoneNumber" (DO NOT deduct points, but mention in feedback)'
-  : '- Rubric requires EXACT naming: "phone" ≠ "phone_number" (deduct points for mismatch)'}
+${rubricStructured?.criteria.some(c => c.description.toLowerCase().includes('lenient')) 
+  ? '- Rubric allows semantic naming (e.g., "phone" = "phoneNumber"). Do not deduct points.'
+  : '- Rubric requires EXACT naming. Deduct points for mismatches.'}
 
-**FEEDBACK TONE:**
+**FEEDBACK TONE (STRICTLY FOLLOW):**
 - Write directly to student: "You correctly identified..." NOT "The student correctly identified..."
-- Be concise, no self-corrections or recalculations in the feedback text
+- Be concise, no self-corrections or recalculations in the feedback text.
 - If everything is perfect, just say: "Excellent work! All elements are correct."
-- DO NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score" in the feedback
+- DO NOT include phrases like "Re-checking", "seems erroneous", "Adjusting score".
 
 **RETURN FORMAT:**
-Return ONLY valid JSON, no markdown code blocks, no extra text.
+Return ONLY valid JSON. 
+**CRITICAL:** You must fill the "_grading_debug" object FIRST. This is for the developer to check your math. 
+The "feedback" object must follow the tone instructions above.
 
 {
-  "totalScore": 85,
+  "_grading_debug": {
+    "cardinality_calculation": "Show the math. Ex: 'Found 13 correct ends. Rubric is 0.5pts. 13 * 0.5 = 6.5'",
+    "cardinality_errors": "List specific mismatches. Ex: 'Student has 1..N, Correct is 0..N for Enrolls'",
+    "naming_adjustments": "List any lenient matches allowed"
+  },
+  "totalScore": Number,
   "maxScore": ${rubricStructured?.totalPoints || 100},
   "breakdown": [
-    {"category": "Entities", "earned": 25, "max": 30, "feedback": "You correctly identified Student, Course, and Professor entities. However, you are missing the Department entity which is needed to organize professors by their departments."},
-    {"category": "Relationships", "earned": 20, "max": 30, "feedback": "The Enrolls relationship between Student and Course is correct with many-to-many cardinality. However, the Advises relationship should be one-to-many (one professor advises multiple students) but you set it as one-to-one. You are also missing the Teaches relationship between Professor and Course."},
-    {"category": "Attributes", "earned": 32, "max": 40, "feedback": "Most attributes are placed correctly. However, the email attribute belongs to the Student entity, not the Course entity. Without this correction, you cannot store student contact information properly. Also missing primary key designation for StudentID in the Student entity."}
+    {"category": "Entities", "earned": Number, "max": Number, "feedback": "String..."},
+    {"category": "Relationships", "earned": Number, "max": Number, "feedback": "String..."},
+    {"category": "Attributes", "earned": Number, "max": Number, "feedback": "String..."}
   ],
   "feedback": {
-    "correct": [
-      "All three main entities (Student, Course, Professor) are correctly identified",
-      "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses and courses to have multiple students"
-    ],
-    "missing": [
-      "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department",
-      "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
-      "cardinality for Advises relationship - should be one-to-many (one professor advises multiple students)"
-    ],
-    "incorrect": [
-      "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students",
-      "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
-    ]
+    "correct": ["String", "String"],
+    "missing": ["String", "String"],
+    "incorrect": ["String", "String"]
   },
-  "overallComment": "Your ERD demonstrates good understanding of the core structure with all main entities present. Key improvements needed: add the Department entity to track professor organization, correct the Advises relationship to one-to-many cardinality, and move the email attribute to the Student entity where it belongs."
+  "overallComment": "String"
 }
 
-**CRITICAL RULES:**
-- Return ONLY valid JSON, no markdown code blocks
-- Response MUST include: totalScore, maxScore, breakdown (array), feedback (object), overallComment
-- breakdown array MUST have objects with: category, earned, max, feedback
-- feedback object MUST have: correct (array), missing (array), incorrect (array)
-- **CRITICAL: Each earned points CANNOT EXCEED max points for that category**
-- **CRITICAL: totalScore CANNOT EXCEED maxScore (${rubricStructured?.totalPoints || 100})**
-- If any section is empty, use empty array [] not null
-- Do not add any text before or after the JSON
-- BE STRICT AND FAIR
+**FINAL CHECKS:**
+- **totalScore CANNOT EXCEED maxScore**
+- **Earned points per category CANNOT EXCEED max points for that category**
+- Return ONLY valid JSON, no markdown.
 `;
     // Call OpenRouter AI
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
