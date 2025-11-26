@@ -196,28 +196,36 @@ app.post('/detect-rubric', async (req, res) => {
         messages: [{
           role: 'user',
           content: `Analyze this grading rubric text. Return ONLY valid JSON with no markdown formatting.
+
 RUBRIC TEXT:
 ${rubricText}
+
 SCOPE - WE EXTRACT:
 ✅ Rubrics for ERD diagram grading
 ✅ Grading categories (Entities, Relationships, Attributes, Keys, Notation, etc.)
 ✅ Point allocations per category
-✅ Grading criteria/descriptions
+✅ Grading criteria/descriptions WITH FORMULAS
 ✅ Total marks
+
 ❌ OUT OF SCOPE (reject if found):
 - Rubrics for SQL queries, normalization, or non-ERD topics
 - Completely unreadable/corrupted text
 - Non-grading content
+
 IF NOT AN ERD RUBRIC:
 {"isERDRubric":false,"reason":"This rubric is for SQL queries, not ERD diagrams"}
+
 IF IS AN ERD RUBRIC:
-{"isERDRubric":true,"totalPoints":100,"criteria":[{"category":"Entities","maxPoints":30,"description":"All entities correctly identified with proper notation"},{"category":"Relationships","maxPoints":30,"description":"Cardinality correct. Relationship names meaningful."}],"notes":"Rubric emphasizes correct notation"}
+{"isERDRubric":true,"totalPoints":100,"criteria":[{"category":"Entities","maxPoints":30,"description":"All entities correctly identified: 2 x 15 = 30"},{"category":"Relationships","maxPoints":30,"description":"Cardinality correct: 0.5 x 60 = 30"}],"notes":"Rubric emphasizes correct notation"}
+
 CRITICAL RULES:
 - Return ONLY valid JSON, no markdown code blocks, no extra text
 - Each criterion MUST have: category, maxPoints, description
+- **PRESERVE FORMULAS IN DESCRIPTION**: If rubric says "0.5 x 16 = 8", include "0.5 x 16" in the description field like "Cardinality correctly identified: 0.5 x 16"
 - If points not stated, estimate based on emphasis
 - Extract ALL grading aspects mentioned
 - Be concise but capture all important criteria`
+
         }],
         temperature: 0.3,
         max_tokens: 2000
