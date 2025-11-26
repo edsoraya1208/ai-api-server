@@ -385,7 +385,7 @@ INCORRECT section example:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout',
+        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 2500
