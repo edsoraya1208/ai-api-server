@@ -10,7 +10,8 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://erducate.vercel.app'
+    'https://erducate.vercel.app',
+    'https://erducate2.vercel.app'
   ],
   credentials: true
 }));
