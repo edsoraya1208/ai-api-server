@@ -71,7 +71,7 @@ app.post('/detect-erd', async (req, res) => {
               text: `Analyze this ERD diagram. Return ONLY valid JSON, no markdown.
 
 CRITICAL DETECTION RULES (MUST FOLLOW):
-1. PRIMARY KEYS are UNDERLINED text - detect ALL underlines carefully
+1. PRIMARY KEYS are UNDERLINED text - dont rely on name alone, look for underline
 2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
 3. CARDINALITY must be read from BOTH sides of relationship 
    - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
