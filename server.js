@@ -245,20 +245,37 @@ CRITICAL RULES:
     }
     const content = aiData.choices[0].message.content;
     console.log('Raw AI response:', content.substring(0, 200) + '...'); // Log first 200 chars
-    // Clean markdown if present
+
+    // Around line 240-260 in your server.js
     const cleanContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
+      .replace(/\n/g, ' ')           // ✅ Remove newlines
+      .replace(/\s+/g, ' ')          // ✅ Normalize whitespace
       .trim();
-    // Parse JSON with error handling
+
+    // Add retry logic with fallback
     let result;
     try {
       result = JSON.parse(cleanContent);
     } catch (parseError) {
-      console.error('❌ JSON Parse Error:', parseError.message);
-      console.error('Content that failed:', cleanContent);
-      throw new Error('AI returned invalid JSON format');
+      console.error('❌ First parse attempt failed, trying to fix...');
+      
+      // ✅ Try to auto-fix common issues
+      const fixedContent = cleanContent
+        .replace(/,\s*}/g, '}')      // Remove trailing commas
+        .replace(/,\s*]/g, ']')      // Remove trailing commas in arrays
+        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":'); // Fix unquoted keys
+      
+      try {
+        result = JSON.parse(fixedContent);
+        console.log('✅ Fixed and parsed successfully');
+      } catch (secondError) {
+        console.error('❌ Content that failed:', cleanContent);
+        throw new Error('AI returned invalid JSON format');
+      }
     }
+
     // Validate result structure
     if (!result || typeof result !== 'object') {
       throw new Error('AI response is not a valid object');
