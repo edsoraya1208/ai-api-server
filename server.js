@@ -118,7 +118,7 @@ REQUIRED FIELDS:
 - Relationships: "subType" is "strong" or "weak", MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
 - Attributes: MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
 - Confidence: 95-100 crystal clear | 80-94 clear | 70-79 requires interpretation | 60-69 unclear/guessing | <60 very uncertain
-- Relationships: max confidence 88 (cardinality requires careful reading)
+- Relationships: max confidence is 88 for relationships, dont exceed.
 - If cardinality OR attribute border unclear → max confidence 75
 
 Return ONLY the JSON object.`
