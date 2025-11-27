@@ -349,6 +349,8 @@ INCORRECT section example:
 - Explain WHY errors matter (what functionality breaks)
 - If everything is perfect: "Excellent work! All elements are correct."
 - **DO NOT use phrases:** "Re-checking", "Adjusting score", "Confidence", "seems erroneous"
+- **Use plain Unicode characters only:** Write "→" not "$\to$", write "×" not "$\times$"
+- **No LaTeX or markdown formatting** in the feedback text itself
 
 **RETURN FORMAT (JSON only, no markdown, no extra text):**
 {
