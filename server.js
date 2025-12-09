@@ -502,6 +502,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
     rubric.notes.toLowerCase().includes('variation')
   ));
 
+  console.log('🔍 Leniency enabled:', hasLenientNaming);
+  console.log('🔍 Rubric notes:', rubric.notes);
+  console.log('🔍 Rubric criteria:', rubric.criteria.map(c => c.description));
+
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
     
