@@ -477,7 +477,7 @@ INCORRECT section example:
 });
 
 // ===========================
-// DETERMINISTIC GRADING FUNCTION (SMART & LENIENT)
+// DETERMINISTIC GRADING FUNCTION (SMART MATCHING + FEEDBACK CONTEXT)
 // ===========================
 function calculateGrades(studentElements, correctElements, rubric) {
   const result = {
@@ -490,14 +490,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
     _debug: {}
   };
 
-  // 1. Create a map to link Student Terms -> Scheme Terms
-  // e.g., if student wrote "Agent Insurance", we map it to "Insurance Agent"
   const entityMap = {}; 
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
-    
-    // Parse multiplier (e.g., "0.5 x 4")
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
     let multiplier = 1;
     let expectedCount = 0;
@@ -515,25 +511,28 @@ function calculateGrades(studentElements, correctElements, rubric) {
     const categoryLower = category.toLowerCase();
 
     // ===========================
-    // A. ENTITY MATCHING (Fuzzy)
+    // A. ENTITY MATCHING
     // ===========================
     if (categoryLower.includes('entit')) {
       const correctEntities = correctElements.filter(e => e.type === 'entity');
       const studentEntities = studentElements.filter(e => e.type === 'entity');
-      
       if (!multiplierMatch) expectedCount = correctEntities.length;
       
       correctEntities.forEach(ce => {
-        // Find match using smart string comparison
         const match = studentEntities.find(se => 
            areStringsSemanticallySimilar(se.name, ce.name) && se.subType === ce.subType
         );
         
         if (match) {
           correctCount++;
-          correctItems.push(ce.name);
-          // SAVE THE MAP! "Student Name" -> "Correct Name"
           entityMap[match.name] = ce.name;
+
+          // FEEDBACK TWEAK: If names are slightly different, note it for the AI
+          if (match.name !== ce.name) {
+             correctItems.push(`${ce.name} (you called it '${match.name}')`);
+          } else {
+             correctItems.push(ce.name);
+          }
         } else {
           missing.push(ce.name);
         }
@@ -541,27 +540,20 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING (Uses Entity Map)
+    // B. ATTRIBUTES
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
       const isPK = categoryLower.includes('primary') || categoryLower.includes('key');
       const targetSubType = isPK ? 'primary_key' : null;
-
       const correctAttrs = correctElements.filter(e => e.type === 'attribute' && (!targetSubType || e.subType === targetSubType));
       const studentAttrs = studentElements.filter(e => e.type === 'attribute' && (!targetSubType || e.subType === targetSubType));
-      
       if (!multiplierMatch) expectedCount = correctAttrs.length;
       
       correctAttrs.forEach(ca => {
         const match = studentAttrs.find(sa => {
-          // 1. Check Name (Fuzzy)
           const nameMatch = areStringsSemanticallySimilar(sa.name, ca.name);
-          
-          // 2. Check Parent Entity (using Map)
-          // If student has "cost" in "Agent Insurance", we map "Agent Insurance" -> "Insurance Agent"
           const mappedParent = entityMap[sa.belongsTo] || sa.belongsTo;
           const parentMatch = areStringsSemanticallySimilar(mappedParent, ca.belongsTo);
-          
           return nameMatch && parentMatch;
         });
         
@@ -575,38 +567,32 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // C. RELATIONSHIP MATCHING (Structure > Name)
+    // C. RELATIONSHIPS (The Feedback Fix is Here!)
     // ===========================
     else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
       const studentRels = studentElements.filter(e => e.type === 'relationship');
-      
       if (!multiplierMatch) expectedCount = correctRels.length;
       
       correctRels.forEach(cr => {
         const match = studentRels.find(sr => {
-           // Resolve student entity names to correct names using the map
            const sFrom = entityMap[sr.from] || sr.from;
            const sTo = entityMap[sr.to] || sr.to;
-
-           // Check Forward: StudentFrom == CorrectFrom AND StudentTo == CorrectTo
-           const forward = areStringsSemanticallySimilar(sFrom, cr.from) && 
-                           areStringsSemanticallySimilar(sTo, cr.to);
-
-           // Check Reverse: StudentFrom == CorrectTo AND StudentTo == CorrectFrom
-           const reverse = areStringsSemanticallySimilar(sFrom, cr.to) && 
-                           areStringsSemanticallySimilar(sTo, cr.from);
-
-           // IF structure matches, we trust it (even if name is 'has' vs 'sign')
-           // OR if name matches perfectly
+           const forward = areStringsSemanticallySimilar(sFrom, cr.from) && areStringsSemanticallySimilar(sTo, cr.to);
+           const reverse = areStringsSemanticallySimilar(sFrom, cr.to) && areStringsSemanticallySimilar(sTo, cr.from);
            const nameMatch = areStringsSemanticallySimilar(sr.name, cr.name);
-           
            return (forward || reverse) || (nameMatch && (forward || reverse));
         });
         
         if (match) {
           correctCount++;
-          correctItems.push(`${cr.name} (${cr.from} ↔ ${cr.to})`);
+          // ✨ NEW FEEDBACK LOGIC ✨
+          // If the name is different (e.g., 'sign' vs 'has'), tell the AI about it.
+          if (!areStringsSemanticallySimilar(match.name, cr.name)) {
+             correctItems.push(`${cr.name} (Structure correct, but you named it '${match.name}')`); 
+          } else {
+             correctItems.push(`${cr.name} (${cr.from} ↔ ${cr.to})`);
+          }
         } else {
           missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
         }
@@ -614,19 +600,16 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // D. CARDINALITY (The Logic You Wanted Preserved + Smart Matching)
+    // D. CARDINALITY (Unchanged)
     // ===========================
     else if (categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
       const studentRels = studentElements.filter(e => e.type === 'relationship');
-      
-      // Auto-detect grading mode (PRESERVING YOUR LOGIC)
       const relationshipCount = correctRels.length;
       const checksPerRelationship = expectedCount / relationshipCount;
-      const useMinMax = (checksPerRelationship >= 3.5); // Option B (approx 4) vs Option A (approx 2)
+      const useMinMax = (checksPerRelationship >= 3.5);
 
       correctRels.forEach(cr => {
-         // FIND MATCH again using the smart logic
          const sr = studentRels.find(s => {
            const sFrom = entityMap[s.from] || s.from;
            const sTo = entityMap[s.to] || s.to;
@@ -636,36 +619,27 @@ function calculateGrades(studentElements, correctElements, rubric) {
          });
 
          if (sr) {
-            // DETECT FLIP (did student draw arrow backwards?)
             const sFrom = entityMap[sr.from] || sr.from;
-            const isFlipped = areStringsSemanticallySimilar(sFrom, cr.to); // Start matches End
-
-            // Get student values, swapping if flipped
+            const isFlipped = areStringsSemanticallySimilar(sFrom, cr.to); 
             const studentFromVal = isFlipped ? sr.cardinalityTo : sr.cardinalityFrom;
             const studentToVal = isFlipped ? sr.cardinalityFrom : sr.cardinalityTo;
 
             if (useMinMax) {
-                // OPTION B: Min/Max Split (4 checks) - EXACTLY AS YOU HAD IT
                 const [cFromMin, cFromMax] = (cr.cardinalityFrom || '..').split('..');
                 const [cToMin, cToMax] = (cr.cardinalityTo || '..').split('..');
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
                 const [sToMin, sToMax] = (studentToVal || '..').split('..');
 
-                // Using fuzzy comparison for numbers (e.g. "0" == "0")
                 if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { correctCount++; correctItems.push(`${cr.name} start-min`); }
                 if (areStringsSemanticallySimilar(sFromMax, cFromMax)) { correctCount++; correctItems.push(`${cr.name} start-max`); }
                 if (areStringsSemanticallySimilar(sToMin, cToMin)) { correctCount++; correctItems.push(`${cr.name} end-min`); }
                 if (areStringsSemanticallySimilar(sToMax, cToMax)) { correctCount++; correctItems.push(`${cr.name} end-max`); }
-
             } else {
-                // OPTION A: Whole match (2 checks)
                 if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
-                    correctCount++; 
-                    correctItems.push(`${cr.name} start`);
+                    correctCount++; correctItems.push(`${cr.name} start`);
                 }
                 if ((studentToVal || '').includes(cr.cardinalityTo) || (cr.cardinalityTo || '').includes(studentToVal)) {
-                    correctCount++; 
-                    correctItems.push(`${cr.name} end`);
+                    correctCount++; correctItems.push(`${cr.name} end`);
                 }
             }
          } else {
@@ -674,22 +648,13 @@ function calculateGrades(studentElements, correctElements, rubric) {
       });
     }
 
-    // Calc Score
     if (!multiplierMatch && expectedCount > 0) multiplier = maxPoints / expectedCount;
     const earned = Math.min(correctCount * multiplier, maxPoints);
-    
-    result.breakdown.push({
-      category,
-      earned: parseFloat(earned.toFixed(2)),
-      max: maxPoints,
-      feedback: ''
-    });
-
+    result.breakdown.push({ category, earned: parseFloat(earned.toFixed(2)), max: maxPoints, feedback: '' });
     result.totalScore += earned;
     result.correctElements[category] = correctItems;
     result.missingElements[category] = missing;
     result.incorrectElements[category] = incorrect;
-    
     result._debug[category] = { expectedCount, correctCount, multiplier, missing };
   });
 
