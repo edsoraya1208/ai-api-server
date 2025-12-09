@@ -344,31 +344,23 @@ ${JSON.stringify(grading.missingElements, null, 2)}
 **What the student got INCORRECT:**
 ${JSON.stringify(grading.incorrectElements, null, 2)}
 
-**YOUR ONLY JOB:**
-Generate helpful, educational feedback for the student. The scores are already calculated - you just explain them in friendly language.
+**YOUR INSTRUCTIONS:**
+1. **CHECK FOR NAMING NOTES:** If a correct item says something like "(you called it 'X')", **YOU MUST MENTION THIS** in the feedback to educate the student.
+   - Example output: "You correctly identified the 'Sign' relationship (which you labeled 'Has'). This is acceptable."
+2. **Be Specific:** Do not just say "All relationships correct." If there was a naming difference allowed, point it out.
+3. **Tone:** Encouraging but educational. Explain *why* errors matter.
 
 **FEEDBACK FORMAT EXAMPLES:**
 
 CORRECT section example:
 - "You correctly identified Student, Course, and Professor entities"
-- "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses"
+- "The Enrolls relationship correctly connects Student and Course. Note: You labeled this 'Takes', which is acceptable."
 
 MISSING section example:
-- "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department"
-- "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
+- "Department entity - Without this, you cannot track which department each professor belongs to"
 
 INCORRECT section example:
-- "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students"
-- "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
-
-**TONE GUIDELINES:**
-- Write directly to student: "You correctly identified..." NOT "The student..."
-- Be encouraging but honest
-- Explain WHY errors matter (what functionality breaks)
-- If everything is perfect: "Excellent work! All elements are correct."
-- **DO NOT use phrases:** "Re-checking", "Adjusting score", "Confidence", "seems erroneous"
-- **Use plain Unicode characters only:** Write "→" not "$\to$", write "×" not "$\times$"
-- **No LaTeX or markdown formatting** in the feedback text itself
+- "The Advises relationship cardinality is one-to-one but should be one-to-many"
 
 **RETURN FORMAT (JSON only, no markdown, no extra text):**
 {
