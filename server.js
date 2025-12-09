@@ -327,9 +327,6 @@ app.post('/autograde-erd', async (req, res) => {
     // ===========================
     // STEP 2: AI GENERATES FEEDBACK ONLY
     // ===========================
-   // ===========================
-    // STEP 2: AI GENERATES FEEDBACK ONLY
-    // ===========================
     const prompt = `You are a strict ERD grading assistant.
     
     INPUT DATA:
@@ -338,18 +335,20 @@ app.post('/autograde-erd', async (req, res) => {
     ITEMS MARKED CORRECT (Do not contradict this):
     ${JSON.stringify(grading.correctElements)}
     
-    ITEMS MARKED WRONG/MISSING (These are ERRORS. Explain why they are needed):
+    ITEMS MARKED MISSING (The student forgot these):
     ${JSON.stringify(grading.missingElements)}
+
+    ITEMS MARKED INCORRECT (The student added these extra or wrong items):
+    ${JSON.stringify(grading.incorrectElements)}
     
     CRITICAL INSTRUCTIONS:
-    1. **Truthfulness**: You must ONLY praise items in the "CORRECT" list. You must ONLY criticize items in the "WRONG/MISSING" list.
-    2. **Handling Missing Items**: If an item is "Missing", it means the student got it wrong or didn't include it. You must explain *why* the correct answer is better.
-    3. **No Hallucinations**: If the "WRONG/MISSING" list is empty, say "Perfect work." Do not invent errors.
-    4. **Formatting**: 
-       - Use PLAIN TEXT only. 
-       - NO Markdown (no bold **, no italics *). 
-       - NO LaTeX (no $ signs, no \times).
-       - Use simple symbols like "->" or "x".
+    1. **Truthfulness**: You must ONLY praise items in the "CORRECT" list. You must ONLY criticize items in the "MISSING" or "INCORRECT" lists.
+    2. **Handling Errors**: 
+       - If an item is "MISSING", explain why it is needed.
+       - If an item is "INCORRECT" (e.g. "Unexpected attribute"), explain that it is not part of the requirement.
+       - **Crucial**: If you see a mismatch (e.g. Missing "purpose", Incorrect "purposes"), explicitly tell the student: "You wrote 'purposes', but the correct attribute is 'purpose'."
+    3. **Formatting**: 
+       - Use PLAIN TEXT only. NO Markdown. NO LaTeX.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
@@ -358,7 +357,8 @@ app.post('/autograde-erd', async (req, res) => {
       ],
       "feedback": {
         "correct": ["List specific correct items"],
-        "improvement_areas": ["List specific missing/wrong items with explanation"]
+        "missing": ["List specific missing items with explanation"],
+        "incorrect": ["List specific incorrect/extra items with explanation"]
       },
       "overallComment": "Short summary encouraging the student."
     }`;
