@@ -299,7 +299,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// 🆕 Auto-grading endpoint (HYBRID APPROACH - FLEXIBLE)
 app.post('/autograde-erd', async (req, res) => {
   try {
     const { studentElements, correctAnswer, rubricStructured } = req.body;
@@ -340,7 +339,6 @@ ${JSON.stringify(grading.correctElements, null, 2)}
 
 **What the student is MISSING:**
 ${JSON.stringify(grading.missingElements, null, 2)}
-
 
 **What the student got INCORRECT:**
 ${JSON.stringify(grading.incorrectElements, null, 2)}
@@ -492,19 +490,17 @@ function calculateGrades(studentElements, correctElements, rubric) {
   };
 
   const hasLenientNaming = 
-  rubric.criteria.some(c => 
-    c.description.toLowerCase().includes('lenient') || 
-    c.description.toLowerCase().includes('semantic')
-  ) ||
-  (rubric.notes && (
-    rubric.notes.toLowerCase().includes('lenient') ||
-    rubric.notes.toLowerCase().includes('semantic') ||
-    rubric.notes.toLowerCase().includes('variation')
-  ));
+    rubric.criteria.some(c => 
+      c.description.toLowerCase().includes('lenient') || 
+      c.description.toLowerCase().includes('semantic')
+    ) ||
+    (rubric.notes && (
+      rubric.notes.toLowerCase().includes('lenient') ||
+      rubric.notes.toLowerCase().includes('semantic') ||
+      rubric.notes.toLowerCase().includes('variation')
+    ));
 
-  console.log('🔍 Leniency enabled:', hasLenientNaming);
-  console.log('🔍 Rubric notes:', rubric.notes);
-  console.log('🔍 Rubric criteria:', rubric.criteria.map(c => c.description));
+  console.log('🔍 Leniency mode:', hasLenientNaming);
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
@@ -555,8 +551,8 @@ function calculateGrades(studentElements, correctElements, rubric) {
     // ATTRIBUTE MATCHING
     // ===========================
     else if (categoryLower.includes('attribute')) {
-      const correctAttrs = correctElements.filter(e => e.type === 'attribute');
-      const studentAttrs = studentElements.filter(e => e.type === 'attribute');
+      const correctAttrs = correctElements.filter(e => e.type === 'attribute' && e.subType !== 'primary_key');
+      const studentAttrs = studentElements.filter(e => e.type === 'attribute' && e.subType !== 'primary_key');
       
       if (!multiplierMatch) expectedCount = correctAttrs.length;
       
@@ -565,7 +561,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
           const nameMatch = hasLenientNaming 
             ? normalizeString(sa.name) === normalizeString(ca.name)
             : sa.name === ca.name;
-          return nameMatch && sa.subType === ca.subType && sa.belongsTo === ca.belongsTo;
+          const belongsMatch = hasLenientNaming
+            ? normalizeString(sa.belongsTo) === normalizeString(ca.belongsTo)
+            : sa.belongsTo === ca.belongsTo;
+          return nameMatch && sa.subType === ca.subType && belongsMatch;
         });
         
         if (match) {
@@ -590,8 +589,11 @@ function calculateGrades(studentElements, correctElements, rubric) {
         const match = studentPKs.find(spk => {
           const nameMatch = hasLenientNaming 
             ? normalizeString(spk.name) === normalizeString(cpk.name)
-            : cpk.name === cpk.name;
-          return nameMatch && spk.belongsTo === cpk.belongsTo;
+            : spk.name === cpk.name;
+          const belongsMatch = hasLenientNaming
+            ? normalizeString(spk.belongsTo) === normalizeString(cpk.belongsTo)
+            : spk.belongsTo === cpk.belongsTo;
+          return nameMatch && belongsMatch;
         });
         
         if (match) {
@@ -617,7 +619,13 @@ function calculateGrades(studentElements, correctElements, rubric) {
           const nameMatch = hasLenientNaming 
             ? normalizeString(sr.name) === normalizeString(cr.name)
             : sr.name === cr.name;
-          return nameMatch && sr.from === cr.from && sr.to === cr.to;
+          const fromMatch = hasLenientNaming
+            ? normalizeString(sr.from) === normalizeString(cr.from)
+            : sr.from === cr.from;
+          const toMatch = hasLenientNaming
+            ? normalizeString(sr.to) === normalizeString(cr.to)
+            : sr.to === cr.to;
+          return nameMatch && fromMatch && toMatch;
         });
         
         if (match) {
@@ -804,13 +812,12 @@ function calculateGrades(studentElements, correctElements, rubric) {
 
 function normalizeString(str) {
   let normalized = str.toLowerCase()
-    .replace(/[_\s-]/g, '')      // Remove underscores, spaces, hyphens
-    .replace(/number/g, 'num')   // number → num
-    .replace(/id/g, '')          // Remove 'id'
-    .replace(/[#]/g, '')         // Remove # symbol
-    .replace(/s$/g, '');         // Remove trailing 's' (visits → visit)
+    .replace(/[_\s-]/g, '')
+    .replace(/number/g, 'num')
+    .replace(/id/g, '')
+    .replace(/[#]/g, '')
+    .replace(/s$/g, '');
   
-  // Sort words alphabetically so "Insurance Agent" = "Agent Insurance"
   const words = normalized.match(/[a-z]+/g) || [];
   return words.sort().join('');
 }
