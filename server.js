@@ -327,77 +327,42 @@ app.post('/autograde-erd', async (req, res) => {
     // ===========================
     // STEP 2: AI GENERATES FEEDBACK ONLY
     // ===========================
-    const prompt = `You are an ERD grading feedback assistant helping students improve their database design skills.
-
-**GRADING RESULTS (Already calculated - DO NOT recalculate):**
-Total Score: ${grading.totalScore} / ${grading.maxScore}
-
-**Category Breakdown:**
-${grading.breakdown.map(b => `- ${b.category}: ${b.earned}/${b.max} points`).join('\n')}
-
-**What the student got CORRECT:**
-${JSON.stringify(grading.correctElements, null, 2)}
-
-**What the student is MISSING:**
-${JSON.stringify(grading.missingElements, null, 2)}
-
-**What the student got INCORRECT:**
-${JSON.stringify(grading.incorrectElements, null, 2)}
-
-**YOUR ONLY JOB:**
-Generate helpful, educational feedback for the student. The scores are already calculated - you just explain them in friendly language.
-
-**FEEDBACK FORMAT EXAMPLES:**
-
-CORRECT section example:
-- "You correctly identified Student, Course, and Professor entities"
-- "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality, allowing students to enroll in multiple courses"
-
-MISSING section example:
-- "Department entity - Without this, you cannot track which department each professor belongs to or organize courses by department"
-- "Teaches relationship between Professor and Course - Without this, you cannot track which professors teach which courses"
-
-INCORRECT section example:
-- "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students"
-- "The email attribute is under Course entity but should be under Student entity - email is student contact information, not course information"
-
-**TONE GUIDELINES:**
-- Write directly to student: "You correctly identified..." NOT "The student..."
-- Be encouraging but honest
-- Explain WHY errors matter (what functionality breaks)
-- If everything is perfect: "Excellent work! All elements are correct."
-- **DO NOT use phrases:** "Re-checking", "Adjusting score", "Confidence", "seems erroneous"
-- **Use plain Unicode characters only:** Write "→" not "$\to$", write "×" not "$\times$"
-- **No LaTeX or markdown formatting** in the feedback text itself
-
-**RETURN FORMAT (JSON only, no markdown, no extra text):**
-{
-  "breakdown": [
+   // ===========================
+    // STEP 2: AI GENERATES FEEDBACK ONLY
+    // ===========================
+    const prompt = `You are a strict ERD grading assistant.
+    
+    INPUT DATA:
+    Total Score: ${grading.totalScore} / ${grading.maxScore}
+    
+    ITEMS MARKED CORRECT (Do not contradict this):
+    ${JSON.stringify(grading.correctElements)}
+    
+    ITEMS MARKED WRONG/MISSING (These are ERRORS. Explain why they are needed):
+    ${JSON.stringify(grading.missingElements)}
+    
+    CRITICAL INSTRUCTIONS:
+    1. **Truthfulness**: You must ONLY praise items in the "CORRECT" list. You must ONLY criticize items in the "WRONG/MISSING" list.
+    2. **Handling Missing Items**: If an item is "Missing", it means the student got it wrong or didn't include it. You must explain *why* the correct answer is better.
+    3. **No Hallucinations**: If the "WRONG/MISSING" list is empty, say "Perfect work." Do not invent errors.
+    4. **Formatting**: 
+       - Use PLAIN TEXT only. 
+       - NO Markdown (no bold **, no italics *). 
+       - NO LaTeX (no $ signs, no \times).
+       - Use simple symbols like "->" or "x".
+    
+    OUTPUT JSON FORMAT (Must match exactly):
     {
-      "category": "Entities",
-      "feedback": "You correctly identified Student, Course, and Professor. Missing: Department entity is needed to organize professors by their departments."
-    },
-    {
-      "category": "Cardinality",
-      "feedback": "Most cardinalities are correct. However, the Advises relationship should be one-to-many (one professor advises multiple students), not one-to-one."
-    }
-  ],
-  "feedback": {
-    "correct": [
-      "All three main entities (Student, Course, Professor) are correctly identified",
-      "The Enrolls relationship correctly connects Student and Course with many-to-many cardinality"
-    ],
-    "missing": [
-      "Department entity - Without this, you cannot track which department each professor belongs to",
-      "Teaches relationship between Professor and Course - needed to track which professors teach which courses"
-    ],
-    "incorrect": [
-      "The Advises relationship cardinality is one-to-one but should be one-to-many because one professor can advise multiple students"
-    ]
-  },
-  "overallComment": "Great work! You correctly identified 96% of the required elements. Focus on reviewing relationship cardinalities and ensure all necessary entities are included to support the required functionality."
-}`;
-
+      "breakdown": [
+        { "category": "Entities", "feedback": "Feedback specifically for entities..." }
+      ],
+      "feedback": {
+        "correct": ["List specific correct items"],
+        "improvement_areas": ["List specific missing/wrong items with explanation"]
+      },
+      "overallComment": "Short summary encouraging the student."
+    }`;
+    
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -669,7 +634,17 @@ function calculateGrades(studentElements, correctElements, rubric) {
                 }
             }
          } else {
-             missing.push(`Cardinality for ${cr.name}`);
+             // DETAILED ERROR LOGGING
+             // Logic: We found the relationship, but the numbers were wrong. 
+             // We capture exactly what was expected vs what was found so the AI can explain it.
+             const sFrom = entityMap[sr.from] || sr.from;
+             const isFlipped = areStringsSemanticallySimilar(sFrom, cr.to);
+             
+             // Get the values the student actually wrote
+             const studentFromVal = isFlipped ? sr.cardinalityTo : sr.cardinalityFrom;
+             const studentToVal = isFlipped ? sr.cardinalityFrom : sr.cardinalityTo;
+
+             missing.push(`${cr.name} cardinality (Expected: ${cr.cardinalityFrom}/${cr.cardinalityTo}, Found: ${studentFromVal || '?'}/${studentToVal || '?'})`);
          }
       });
     }
