@@ -341,10 +341,6 @@ ${JSON.stringify(grading.correctElements, null, 2)}
 **What the student is MISSING:**
 ${JSON.stringify(grading.missingElements, null, 2)}
 
-**IMPORTANT CONTEXT:**
-${hasLenientNaming ? '- This rubric ACCEPTS semantic variations (e.g., "Agent Insurance" = "Insurance Agent")' : '- This rubric requires EXACT naming (strict matching)'}
-- When giving feedback, mention what the student actually wrote if you can infer it from the context
-
 
 **What the student got INCORRECT:**
 ${JSON.stringify(grading.incorrectElements, null, 2)}
