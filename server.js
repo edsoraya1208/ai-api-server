@@ -341,6 +341,11 @@ ${JSON.stringify(grading.correctElements, null, 2)}
 **What the student is MISSING:**
 ${JSON.stringify(grading.missingElements, null, 2)}
 
+**IMPORTANT CONTEXT:**
+${hasLenientNaming ? '- This rubric ACCEPTS semantic variations (e.g., "Agent Insurance" = "Insurance Agent")' : '- This rubric requires EXACT naming (strict matching)'}
+- When giving feedback, mention what the student actually wrote if you can infer it from the context
+
+
 **What the student got INCORRECT:**
 ${JSON.stringify(grading.incorrectElements, null, 2)}
 
@@ -490,10 +495,16 @@ function calculateGrades(studentElements, correctElements, rubric) {
     _debug: {}
   };
 
-  const hasLenientNaming = rubric.criteria.some(c => 
+  const hasLenientNaming = 
+  rubric.criteria.some(c => 
     c.description.toLowerCase().includes('lenient') || 
     c.description.toLowerCase().includes('semantic')
-  );
+  ) ||
+  (rubric.notes && (
+    rubric.notes.toLowerCase().includes('lenient') ||
+    rubric.notes.toLowerCase().includes('semantic') ||
+    rubric.notes.toLowerCase().includes('variation')
+  ));
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
@@ -792,8 +803,14 @@ function calculateGrades(studentElements, correctElements, rubric) {
 }
 
 function normalizeString(str) {
-  return str.toLowerCase()
-    .replace(/[_\s-]/g, '')
-    .replace(/number/g, 'num')
-    .replace(/id/g, '');
+  let normalized = str.toLowerCase()
+    .replace(/[_\s-]/g, '')      // Remove underscores, spaces, hyphens
+    .replace(/number/g, 'num')   // number → num
+    .replace(/id/g, '')          // Remove 'id'
+    .replace(/[#]/g, '')         // Remove # symbol
+    .replace(/s$/g, '');         // Remove trailing 's' (visits → visit)
+  
+  // Sort words alphabetically so "Insurance Agent" = "Agent Insurance"
+  const words = normalized.match(/[a-z]+/g) || [];
+  return words.sort().join('');
 }
