@@ -455,14 +455,14 @@ function calculateGrades(studentElements, correctElements, rubric) {
     _debug: {}
   };
 
-  // 1. Create a map to link Student Terms -> Scheme Terms
-  // e.g., if student wrote "Agent Insurance", we map it to "Insurance Agent"
+  // NEW: Track which student elements have been successfully matched
+  const matchedStudentIds = new Set();
+
   const entityMap = {}; 
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
     
-    // Parse multiplier (e.g., "0.5 x 4")
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
     let multiplier = 1;
     let expectedCount = 0;
@@ -480,7 +480,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
     const categoryLower = category.toLowerCase();
 
     // ===========================
-    // A. ENTITY MATCHING (Fuzzy)
+    // A. ENTITY MATCHING
     // ===========================
     if (categoryLower.includes('entit')) {
       const correctEntities = correctElements.filter(e => e.type === 'entity');
@@ -489,7 +489,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
       if (!multiplierMatch) expectedCount = correctEntities.length;
       
       correctEntities.forEach(ce => {
-        // Find match using smart string comparison
         const match = studentEntities.find(se => 
            areStringsSemanticallySimilar(se.name, ce.name) && se.subType === ce.subType
         );
@@ -497,16 +496,23 @@ function calculateGrades(studentElements, correctElements, rubric) {
         if (match) {
           correctCount++;
           correctItems.push(ce.name);
-          // SAVE THE MAP! "Student Name" -> "Correct Name"
           entityMap[match.name] = ce.name;
+          matchedStudentIds.add(match.id); // NEW: Mark as used
         } else {
           missing.push(ce.name);
         }
       });
+
+      // NEW: Find Student Entities that were NOT matched (The "Wrong" ones)
+      studentEntities.forEach(se => {
+          if (!matchedStudentIds.has(se.id)) {
+              incorrect.push(`Extra/Incorrect Entity: ${se.name}`);
+          }
+      });
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING (Uses Entity Map)
+    // B. ATTRIBUTE & KEY MATCHING
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
       const isPK = categoryLower.includes('primary') || categoryLower.includes('key');
@@ -519,28 +525,31 @@ function calculateGrades(studentElements, correctElements, rubric) {
       
       correctAttrs.forEach(ca => {
         const match = studentAttrs.find(sa => {
-          // 1. Check Name (Fuzzy)
           const nameMatch = areStringsSemanticallySimilar(sa.name, ca.name);
-          
-          // 2. Check Parent Entity (using Map)
-          // If student has "cost" in "Agent Insurance", we map "Agent Insurance" -> "Insurance Agent"
           const mappedParent = entityMap[sa.belongsTo] || sa.belongsTo;
           const parentMatch = areStringsSemanticallySimilar(mappedParent, ca.belongsTo);
-          
           return nameMatch && parentMatch;
         });
         
         if (match) {
           correctCount++;
           correctItems.push(`${ca.name} (${ca.belongsTo})`);
+          matchedStudentIds.add(match.id); // NEW: Mark as used
         } else {
           missing.push(`${ca.name} in ${ca.belongsTo}`);
         }
       });
+
+      // NEW: Find Leftover Attributes (This catches "purposes" when we wanted "purpose")
+      studentAttrs.forEach(sa => {
+          if (!matchedStudentIds.has(sa.id)) {
+              incorrect.push(`Unexpected attribute: '${sa.name}' in ${sa.belongsTo}`);
+          }
+      });
     }
 
     // ===========================
-    // C. RELATIONSHIP MATCHING (Structure > Name)
+    // C. RELATIONSHIP MATCHING
     // ===========================
     else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
@@ -550,48 +559,43 @@ function calculateGrades(studentElements, correctElements, rubric) {
       
       correctRels.forEach(cr => {
         const match = studentRels.find(sr => {
-           // Resolve student entity names to correct names using the map
            const sFrom = entityMap[sr.from] || sr.from;
            const sTo = entityMap[sr.to] || sr.to;
-
-           // Check Forward: StudentFrom == CorrectFrom AND StudentTo == CorrectTo
-           const forward = areStringsSemanticallySimilar(sFrom, cr.from) && 
-                           areStringsSemanticallySimilar(sTo, cr.to);
-
-           // Check Reverse: StudentFrom == CorrectTo AND StudentTo == CorrectFrom
-           const reverse = areStringsSemanticallySimilar(sFrom, cr.to) && 
-                           areStringsSemanticallySimilar(sTo, cr.from);
-
-           // IF structure matches, we trust it (even if name is 'has' vs 'sign')
-           // OR if name matches perfectly
+           const forward = areStringsSemanticallySimilar(sFrom, cr.from) && areStringsSemanticallySimilar(sTo, cr.to);
+           const reverse = areStringsSemanticallySimilar(sFrom, cr.to) && areStringsSemanticallySimilar(sTo, cr.from);
            const nameMatch = areStringsSemanticallySimilar(sr.name, cr.name);
-           
            return (forward || reverse) || (nameMatch && (forward || reverse));
         });
         
         if (match) {
           correctCount++;
           correctItems.push(`${cr.name} (${cr.from} ↔ ${cr.to})`);
+          matchedStudentIds.add(match.id); // NEW: Mark as used
         } else {
           missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
         }
       });
+      
+      // NEW: Find Leftover Relationships
+      studentRels.forEach(sr => {
+          if (!matchedStudentIds.has(sr.id)) {
+              incorrect.push(`Extra relationship: ${sr.name}`);
+          }
+      });
     }
 
     // ===========================
-    // D. CARDINALITY (The Logic You Wanted Preserved + Smart Matching)
+    // D. CARDINALITY 
     // ===========================
     else if (categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
       const studentRels = studentElements.filter(e => e.type === 'relationship');
       
-      // Auto-detect grading mode (PRESERVING YOUR LOGIC)
       const relationshipCount = correctRels.length;
       const checksPerRelationship = expectedCount / relationshipCount;
-      const useMinMax = (checksPerRelationship >= 3.5); // Option B (approx 4) vs Option A (approx 2)
+      const useMinMax = (checksPerRelationship >= 3.5);
 
       correctRels.forEach(cr => {
-         // FIND MATCH again using the smart logic
          const sr = studentRels.find(s => {
            const sFrom = entityMap[s.from] || s.from;
            const sTo = entityMap[s.to] || s.to;
@@ -601,50 +605,53 @@ function calculateGrades(studentElements, correctElements, rubric) {
          });
 
          if (sr) {
-            // DETECT FLIP (did student draw arrow backwards?)
             const sFrom = entityMap[sr.from] || sr.from;
-            const isFlipped = areStringsSemanticallySimilar(sFrom, cr.to); // Start matches End
-
-            // Get student values, swapping if flipped
+            const isFlipped = areStringsSemanticallySimilar(sFrom, cr.to); 
             const studentFromVal = isFlipped ? sr.cardinalityTo : sr.cardinalityFrom;
             const studentToVal = isFlipped ? sr.cardinalityFrom : sr.cardinalityTo;
 
             if (useMinMax) {
-                // OPTION B: Min/Max Split (4 checks) - EXACTLY AS YOU HAD IT
+                // OPTION B: Min/Max Split
                 const [cFromMin, cFromMax] = (cr.cardinalityFrom || '..').split('..');
                 const [cToMin, cToMax] = (cr.cardinalityTo || '..').split('..');
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
                 const [sToMin, sToMax] = (studentToVal || '..').split('..');
 
-                // Using fuzzy comparison for numbers (e.g. "0" == "0")
                 if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { correctCount++; correctItems.push(`${cr.name} start-min`); }
+                else incorrect.push(`${cr.name} start-min (Exp:${cFromMin} Found:${sFromMin})`); // NEW DETAILED LOG
+
                 if (areStringsSemanticallySimilar(sFromMax, cFromMax)) { correctCount++; correctItems.push(`${cr.name} start-max`); }
+                else incorrect.push(`${cr.name} start-max (Exp:${cFromMax} Found:${sFromMax})`);
+
                 if (areStringsSemanticallySimilar(sToMin, cToMin)) { correctCount++; correctItems.push(`${cr.name} end-min`); }
+                else incorrect.push(`${cr.name} end-min (Exp:${cToMin} Found:${sToMin})`);
+
                 if (areStringsSemanticallySimilar(sToMax, cToMax)) { correctCount++; correctItems.push(`${cr.name} end-max`); }
+                else incorrect.push(`${cr.name} end-max (Exp:${cToMax} Found:${sToMax})`);
 
             } else {
-                // OPTION A: Whole match (2 checks)
-                if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
-                    correctCount++; 
-                    correctItems.push(`${cr.name} start`);
-                }
-                if ((studentToVal || '').includes(cr.cardinalityTo) || (cr.cardinalityTo || '').includes(studentToVal)) {
-                    correctCount++; 
-                    correctItems.push(`${cr.name} end`);
-                }
+               // OPTION A: Whole match
+               // Check From
+               if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
+                   correctCount++; 
+                   correctItems.push(`${cr.name} start`);
+               } else {
+                   // NEW: Detailed mismatch log
+                   incorrect.push(`${cr.name} start (Exp:${cr.cardinalityFrom} Found:${studentFromVal})`);
+               }
+               
+               // Check To
+               if ((studentToVal || '').includes(cr.cardinalityTo) || (cr.cardinalityTo || '').includes(studentToVal)) {
+                   correctCount++; 
+                   correctItems.push(`${cr.name} end`);
+               } else {
+                   // NEW: Detailed mismatch log
+                   incorrect.push(`${cr.name} end (Exp:${cr.cardinalityTo} Found:${studentToVal})`);
+               }
             }
          } else {
-             // DETAILED ERROR LOGGING
-             // Logic: We found the relationship, but the numbers were wrong. 
-             // We capture exactly what was expected vs what was found so the AI can explain it.
-             const sFrom = entityMap[sr.from] || sr.from;
-             const isFlipped = areStringsSemanticallySimilar(sFrom, cr.to);
-             
-             // Get the values the student actually wrote
-             const studentFromVal = isFlipped ? sr.cardinalityTo : sr.cardinalityFrom;
-             const studentToVal = isFlipped ? sr.cardinalityFrom : sr.cardinalityTo;
-
-             missing.push(`${cr.name} cardinality (Expected: ${cr.cardinalityFrom}/${cr.cardinalityTo}, Found: ${studentFromVal || '?'}/${studentToVal || '?'})`);
+             // Relationship missing entirely means cardinality is also missing
+             missing.push(`Cardinality for ${cr.name}`);
          }
       });
     }
@@ -665,7 +672,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
     result.missingElements[category] = missing;
     result.incorrectElements[category] = incorrect;
     
-    result._debug[category] = { expectedCount, correctCount, multiplier, missing };
+    result._debug[category] = { expectedCount, correctCount, multiplier, missing, incorrect };
   });
 
   result.totalScore = parseFloat(result.totalScore.toFixed(2));
