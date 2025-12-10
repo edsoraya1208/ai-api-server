@@ -87,10 +87,12 @@ CARDINALITY MAPPING:
 - If only max shown: M→"0..M", 1→"0..1"
 - ⚠️ Read CAREFULLY: "M 1" means min=1 max=M → "1..M", NOT "0..M"
 
-REJECT IF:
-- EERD features: (d) symbols, triangles, subclass/superclass
-- Crow's Foot notation: >< |< symbols
-- Not a database diagram
+REJECT IF (set isERD=false and provide rejectionReason):
+- EERD features: (d) symbols, triangles with "d", ISA relationships, subclass/superclass hierarchies → "This is an EERD (Enhanced ERD), not a basic ERD"
+- Crow's Foot notation: >< |< symbols → "This uses Crow's Foot notation, not Chen notation ERD"
+- UML Class Diagram → "This is a UML Class Diagram, not an ERD"
+- Flowchart → "This is a flowchart, not an ERD"
+- Other diagram types → "This is not an ERD diagram"
 
 DETECT ALL:
 ✅ Entities (strong=single rectangle, weak=double rectangle)
@@ -103,7 +105,7 @@ DETECT ALL:
    - foreign_key: key from another entity
    - regular: normal single circle/oval
 
-RESPONSE FORMAT:
+RESPONSE FORMAT FOR ERD:
 {
   "isERD": true,
   "elements": [
@@ -111,6 +113,12 @@ RESPONSE FORMAT:
     {"id": "el_2", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..M", "cardinalityTo": "1..1", "confidence": 88},
     {"id": "el_3", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
   ]
+}
+
+RESPONSE FORMAT FOR NON-ERD:
+{
+  "isERD": false,
+  "rejectionReason": "This is an EERD (Enhanced ERD), not a basic ERD"
 }
 
 REQUIRED FIELDS:
@@ -121,6 +129,7 @@ REQUIRED FIELDS:
 - Confidence: 95-100 crystal clear | 80-94 clear | 70-79 requires interpretation | 60-69 unclear/guessing | <60 very uncertain
 - Relationships: max confidence is 88 for relationships, DON'T exceed.
 - If cardinality OR attribute border unclear → max confidence 75
+- If NOT an ERD: MUST include "rejectionReason" explaining what it is instead
 
 Return ONLY the JSON object.`
             },
