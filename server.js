@@ -354,6 +354,8 @@ app.post('/autograde-erd', async (req, res) => {
     CRITICAL INSTRUCTIONS:
     1. **Grouping**: 
        - In the "correct" list, group simple items by category on one line.
+       - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text. **DO NOT** remove the note to make it look "clean".
+       - Example Output: "Entities: CUSTOMER, RENTAL, CAR (Note: You wrote 'Cars')"
     
     2. **Concise Educational Explanations**:
        - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
