@@ -457,7 +457,7 @@ app.post('/autograde-erd', async (req, res) => {
 });
 
 // ===========================
-// DETERMINISTIC GRADING FUNCTION (SMART FEEDBACK V2 - Derived Fix)
+// DETERMINISTIC GRADING FUNCTION (STRICT SHAPE / LENIENT NAME)
 // ===========================
 function calculateGrades(studentElements, correctElements, rubric) {
   const result = {
@@ -476,7 +476,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
     
-    // Extract multiplier
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
     let multiplier = 1;
     let expectedCount = 0;
@@ -503,21 +502,29 @@ function calculateGrades(studentElements, correctElements, rubric) {
       if (!multiplierMatch) expectedCount = correctEntities.length;
       
       correctEntities.forEach(ce => {
+        // 1. Find Name Match
         const match = studentEntities.find(se => 
-           areStringsSemanticallySimilar(se.name, ce.name) && se.subType === ce.subType
+           areStringsSemanticallySimilar(se.name, ce.name)
         );
         
         if (match) {
-          correctCount++;
-          // Smart Feedback: Name mismatch (e.g. Car vs Cars)
-          if (match.name !== ce.name) {
-             correctItems.push(`${ce.name} (Note: You wrote '${match.name}')`);
+          // 2. STRICT TYPE CHECK
+          if (match.subType !== ce.subType) {
+              // WRONG SHAPE = NO POINTS
+              incorrect.push(`${ce.name} (Incorrect Type: You used '${match.subType}', expected '${ce.subType}')`);
+              matchedStudentIds.add(match.id); // Mark as seen so it doesn't show as "Extra"
           } else {
-             correctItems.push(ce.name);
+              // CORRECT SHAPE = POINTS
+              correctCount++;
+              // Lenient Naming Check
+              if (match.name !== ce.name) {
+                 correctItems.push(`${ce.name} (Note: You wrote '${match.name}')`);
+              } else {
+                 correctItems.push(ce.name);
+              }
+              entityMap[match.name] = ce.name;
+              matchedStudentIds.add(match.id);
           }
-          
-          entityMap[match.name] = ce.name;
-          matchedStudentIds.add(match.id);
         } else {
           missing.push(ce.name);
         }
@@ -532,12 +539,13 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING (THE FIX IS HERE)
+    // B. ATTRIBUTE & KEY MATCHING (STRICT DERIVED CHECK)
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
       const isPK = categoryLower.includes('primary') || categoryLower.includes('key');
       const targetSubType = isPK ? 'primary_key' : null;
 
+      // Filter lists based on what we are currently grading (Attributes vs PKs)
       const correctAttrs = correctElements.filter(e => e.type === 'attribute' && (!targetSubType || e.subType === targetSubType));
       const studentAttrs = studentElements.filter(e => e.type === 'attribute' && (!targetSubType || e.subType === targetSubType));
       
@@ -552,28 +560,19 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
-          correctCount++;
-          
-          // 🆕 SMART FEEDBACK: Check for Type Mismatch (e.g. Regular vs Derived)
-          let feedbackNote = "";
-          
-          // 1. Name Check (e.g. typo)
-          if (match.name !== ca.name) {
-            feedbackNote += `(Note: '${match.name}') `;
-          }
-          
-          // 2. SubType Check (Solid vs Dashed vs Double)
-          // We ignore this check for PKs because they are handled by the category filter
+          // STRICT TYPE CHECK (Ignore for PKs as they are filtered by category already)
           if (!isPK && match.subType !== ca.subType) {
-            feedbackNote += `(⚠️ Warning: You drew this as '${match.subType}', but it should be '${ca.subType}') `;
-          }
-
-          if (feedbackNote) {
-             correctItems.push(`${ca.name} ${feedbackNote.trim()}`);
+             // WRONG SHAPE = NO POINTS
+             incorrect.push(`${ca.name} (Incorrect Type: You used '${match.subType}' oval, expected '${ca.subType}' oval)`);
           } else {
-             correctItems.push(ca.name);
+             // CORRECT SHAPE = POINTS
+             correctCount++;
+             if (match.name !== ca.name) {
+                correctItems.push(`${ca.name} (Note: '${match.name}')`);
+             } else {
+                correctItems.push(ca.name);
+             }
           }
-          
           matchedStudentIds.add(match.id);
         } else {
           missing.push(`${ca.name} in ${ca.belongsTo}`);
@@ -589,7 +588,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // C. RELATIONSHIP MATCHING (FINAL POLISH)
+    // C. RELATIONSHIP MATCHING
     // ===========================
     else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
@@ -608,26 +607,19 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
-          correctCount++;
-          
-          let feedbackNote = "";
-          
-          // 1. Name Check
-          if (match.name !== cr.name) {
-             feedbackNote += `(Note: '${match.name}') `;
-          }
-
-          // 2. SubType Check (Single vs Double Diamond) - NEW!
+          // STRICT TYPE CHECK (Weak vs Strong Diamond)
           if (match.subType !== cr.subType) {
-             feedbackNote += `(⚠️ Warning: You drew this as '${match.subType}', but it should be '${cr.subType}') `;
-          }
-
-          if (feedbackNote) {
-             correctItems.push(`${cr.name} ${feedbackNote.trim()}`);
+             // WRONG SHAPE = NO POINTS
+             incorrect.push(`${cr.name} (Incorrect Type: You used '${match.subType}' diamond, expected '${cr.subType}')`);
           } else {
-             correctItems.push(cr.name);
+             // CORRECT
+             correctCount++;
+             if (match.name !== cr.name) {
+                correctItems.push(`${cr.name} (Note: '${match.name}')`);
+             } else {
+                correctItems.push(cr.name);
+             }
           }
-          
           matchedStudentIds.add(match.id);
         } else {
           missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
@@ -640,8 +632,9 @@ function calculateGrades(studentElements, correctElements, rubric) {
           }
       });
     }
+
     // ===========================
-    // D. CARDINALITY 
+    // D. CARDINALITY (Unchanged)
     // ===========================
     else if (categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
