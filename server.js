@@ -688,7 +688,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
   return result;
 }
 
-// HELPER: Fuzzy String Matcher (Safe Version)
+// HELPER: Fuzzy String Matcher (Professional "Stemming" Version)
 function areStringsSemanticallySimilar(str1, str2) {
   if (!str1 || !str2) return false;
   
@@ -696,28 +696,34 @@ function areStringsSemanticallySimilar(str1, str2) {
   const s1 = str1.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const s2 = str2.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 2. Exact Match (The Old Way - still runs first!)
+  // 2. Exact Match (The Old Way - THIS RUNS FIRST, so it's safe!)
   if (s1 === s2) return true;
 
-  // 3. The "Plural Fix" (SAFE MODE)
-  // Only checks if one is exactly the other + 's'
-  // We check length > 3 to avoid breaking short acronyms
-  if (s1.length > 3 && s2.length > 3) {
-    if (s1 === s2 + 's') return true; // car == cars
-    if (s2 === s1 + 's') return true; // cars == car
+  // 3. The "Plural Fix" (Stemming)
+  // Logic: "Is one word just the other word + s?"
+  // We use >= 3 so it works for "CAR" (length 3) but skips "IS" (length 2)
+  const MIN_LEN = 3; 
+
+  if (s1.length >= MIN_LEN && s2.length >= MIN_LEN) {
+    if (s1 === s2 + 's') return true;  // car == cars
+    if (s2 === s1 + 's') return true;  // cars == car
     if (s1 === s2 + 'es') return true; // bus == buses
     if (s2 === s1 + 'es') return true; // buses == bus
   }
 
-  // 4. The "Past Tense Fix" (Assign vs Assigned)
-  if (s1.length > 3 && s2.length > 3) {
-    if (s1.endsWith('ed') && s1.slice(0, -2) === s2) return true; // assigned == assign
-    if (s2.endsWith('ed') && s2.slice(0, -2) === s1) return true; // assign == assigned
-    if (s1.endsWith('d') && s1.slice(0, -1) === s2) return true; // used == use
-    if (s2.endsWith('d') && s2.slice(0, -1) === s1) return true; // use == used
+  // 4. The "Past Tense Fix" (Stemming for Verbs)
+  // Logic: "Is one word just the other word + ed or d?"
+  if (s1.length >= MIN_LEN && s2.length >= MIN_LEN) {
+    // Check for 'ed' suffix (assign vs assigned)
+    if (s1.endsWith('ed') && s1.slice(0, -2) === s2) return true;
+    if (s2.endsWith('ed') && s2.slice(0, -2) === s1) return true;
+    
+    // Check for 'd' suffix (use vs used)
+    if (s1.endsWith('d') && s1.slice(0, -1) === s2) return true;
+    if (s2.endsWith('d') && s2.slice(0, -1) === s1) return true;
   }
 
-  // 5. Word Bag (The "Driver ID" vs "ID Driver" Fix - still kept!)
+  // 5. Word Bag (Handles "Driver ID" vs "ID Driver")
   const words1 = str1.toLowerCase().split(/[\s_]+/).sort().join('');
   const words2 = str2.toLowerCase().split(/[\s_]+/).sort().join('');
   if (words1 === words2) return true;
