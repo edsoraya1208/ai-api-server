@@ -354,20 +354,19 @@ app.post('/autograde-erd', async (req, res) => {
     CRITICAL INSTRUCTIONS:
     1. **Grouping**: 
        - In the "correct" list, group simple items by category on one line.
-       - If an item has a specific note, keep it on its own line.
     
-    2. **Educational Explanations**:
-       - For "INCORRECT" items, explain the **Database Concept** that was violated.
-       - **Derived Attributes**: Explain that they are calculated from other data (e.g. Dates) and not stored.
-       - **Cardinality**: Explain the difference between Mandatory (1) and Optional (0) in terms of "existence dependency".
-       - **Multivalued**: Explain that single ovals cannot hold multiple values (like multiple phone numbers).
+    2. **Concise Educational Explanations**:
+       - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
+       - **Derived Attributes**: Briefly explain they are calculated from other data and must use dashed ovals.
+       - **Cardinality**: Briefly note the difference between Mandatory (1) and Optional (0) participation.
+       - **Multivalued**: Briefly mention single ovals cannot hold multiple values.
+       - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
 
-    3. **SAFETY GUARDRAIL (Crucial)**:
-       - **DO NOT** invent business rules or scenario details that are not visible in the data.
-       - Use phrases like "This implies..." or "In database theory..." rather than "The requirements stated..." (since you do not see the requirements).
-       - Keep explanations generic and based on ERD standards.
+    3. **SAFETY GUARDRAIL**:
+       - **DO NOT** invent business rules.
+       - Use phrases like "This implies..." rather than "The requirements stated...".
 
-    4. **Tone**: Be encouraging but strict on technical accuracy.
+    4. **Tone**: Encouraging but direct.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
@@ -376,8 +375,8 @@ app.post('/autograde-erd', async (req, res) => {
       ],
       "feedback": {
         "correct": ["List of strengths"],
-        "missing": ["List of missing items with theory explanation"],
-        "incorrect": ["List of errors with theory explanation"]
+        "missing": ["List of missing items"],
+        "incorrect": ["List of errors with 1-2 sentence educational explanation"]
       },
       "overallComment": "Summary comment."
     }`;
