@@ -335,47 +335,51 @@ app.post('/autograde-erd', async (req, res) => {
 
    
     // ===========================
-    // STEP 2: AI GENERATES FEEDBACK ONLY
+    // STEP 2: AI GENERATES FEEDBACK ONLY (SAFE MODE)
     // ===========================
-    const prompt = `You are a strict ERD grading assistant.
+    const prompt = `You are an expert Database Professor grading an ERD.
     
     INPUT DATA:
     Total Score: ${grading.totalScore} / ${grading.maxScore}
     
-    ITEMS MARKED CORRECT: (Do not contradict this):
+    ITEMS MARKED CORRECT:
     ${JSON.stringify(grading.correctElements)}
     
-    ITEMS MARKED MISSING: (The student forgot these)
+    ITEMS MARKED MISSING:
     ${JSON.stringify(grading.missingElements)}
 
-    ITEMS MARKED INCORRECT:(The student added these extra or wrong items)
+    ITEMS MARKED INCORRECT:
     ${JSON.stringify(grading.incorrectElements)}
     
     CRITICAL INSTRUCTIONS:
-    1. **Truthfulness**: You must ONLY praise items in the "CORRECT" list. You must ONLY criticize items in the "MISSING" or "INCORRECT" lists.
-    2. **Grouping (Better UI)**: 
-       - For the "CORRECT" list, DO NOT list every item individually. 
-       - Group them by category on one line.
-       - Example: "Entities: Car, Customer, Rental"
-       - Example: "Attributes: Vehicle_ID, Model, Name..."
-       - **Exception**: If an item has a specific note (e.g. "Note: You wrote..."), list that item on its own line so the student sees the warning clearly.
-    3. **Handling Errors**: 
-       - If an item is "MISSING", explain why it is needed.
-       - If an item is "INCORRECT", explain that it is not part of the requirement.
-    4. **Formatting**: 
-       - Use PLAIN TEXT only. NO Markdown. NO LaTeX.
+    1. **Grouping**: 
+       - In the "correct" list, group simple items by category on one line.
+       - If an item has a specific note, keep it on its own line.
+    
+    2. **Educational Explanations**:
+       - For "INCORRECT" items, explain the **Database Concept** that was violated.
+       - **Derived Attributes**: Explain that they are calculated from other data (e.g. Dates) and not stored.
+       - **Cardinality**: Explain the difference between Mandatory (1) and Optional (0) in terms of "existence dependency".
+       - **Multivalued**: Explain that single ovals cannot hold multiple values (like multiple phone numbers).
+
+    3. **SAFETY GUARDRAIL (Crucial)**:
+       - **DO NOT** invent business rules or scenario details that are not visible in the data.
+       - Use phrases like "This implies..." or "In database theory..." rather than "The requirements stated..." (since you do not see the requirements).
+       - Keep explanations generic and based on ERD standards.
+
+    4. **Tone**: Be encouraging but strict on technical accuracy.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
       "breakdown": [
-        { "category": "Entities", "feedback": "Feedback specifically for entities..." }
+        { "category": "Entities", "feedback": "Brief feedback..." }
       ],
       "feedback": {
-        "correct": ["List grouped summary lines here"],
-        "missing": ["List specific missing items with explanation"],
-        "incorrect": ["List specific incorrect/extra items with explanation"]
+        "correct": ["List of strengths"],
+        "missing": ["List of missing items with theory explanation"],
+        "incorrect": ["List of errors with theory explanation"]
       },
-      "overallComment": "Short summary encouraging the student."
+      "overallComment": "Summary comment."
     }`;
     
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
