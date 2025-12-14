@@ -333,6 +333,7 @@ app.post('/autograde-erd', async (req, res) => {
     
     console.log('📊 Calculated scores:', grading._debug);
 
+   
     // ===========================
     // STEP 2: AI GENERATES FEEDBACK ONLY
     // ===========================
@@ -341,22 +342,27 @@ app.post('/autograde-erd', async (req, res) => {
     INPUT DATA:
     Total Score: ${grading.totalScore} / ${grading.maxScore}
     
-    ITEMS MARKED CORRECT (Do not contradict this):
+    ITEMS MARKED CORRECT: (Do not contradict this):
     ${JSON.stringify(grading.correctElements)}
     
-    ITEMS MARKED MISSING (The student forgot these):
+    ITEMS MARKED MISSING: (The student forgot these)
     ${JSON.stringify(grading.missingElements)}
 
-    ITEMS MARKED INCORRECT (The student added these extra or wrong items):
+    ITEMS MARKED INCORRECT:(The student added these extra or wrong items)
     ${JSON.stringify(grading.incorrectElements)}
     
     CRITICAL INSTRUCTIONS:
     1. **Truthfulness**: You must ONLY praise items in the "CORRECT" list. You must ONLY criticize items in the "MISSING" or "INCORRECT" lists.
-    2. **Handling Errors**: 
+    2. **Grouping (Better UI)**: 
+       - For the "CORRECT" list, DO NOT list every item individually. 
+       - Group them by category on one line.
+       - Example: "Entities: Car, Customer, Rental"
+       - Example: "Attributes: Vehicle_ID, Model, Name..."
+       - **Exception**: If an item has a specific note (e.g. "Note: You wrote..."), list that item on its own line so the student sees the warning clearly.
+    3. **Handling Errors**: 
        - If an item is "MISSING", explain why it is needed.
-       - If an item is "INCORRECT" (e.g. "Unexpected attribute"), explain that it is not part of the requirement.
-       - **Crucial**: If you see a mismatch (e.g. Missing "purpose", Incorrect "purposes"), explicitly tell the student: "You wrote 'purposes', but the correct attribute is 'purpose'."
-    3. **Formatting**: 
+       - If an item is "INCORRECT", explain that it is not part of the requirement.
+    4. **Formatting**: 
        - Use PLAIN TEXT only. NO Markdown. NO LaTeX.
     
     OUTPUT JSON FORMAT (Must match exactly):
@@ -365,7 +371,7 @@ app.post('/autograde-erd', async (req, res) => {
         { "category": "Entities", "feedback": "Feedback specifically for entities..." }
       ],
       "feedback": {
-        "correct": ["List specific correct items"],
+        "correct": ["List grouped summary lines here"],
         "missing": ["List specific missing items with explanation"],
         "incorrect": ["List specific incorrect/extra items with explanation"]
       },
@@ -451,7 +457,7 @@ app.post('/autograde-erd', async (req, res) => {
 });
 
 // ===========================
-// DETERMINISTIC GRADING FUNCTION (SMART & LENIENT)
+// DETERMINISTIC GRADING FUNCTION (SMART FEEDBACK V2 - Derived Fix)
 // ===========================
 function calculateGrades(studentElements, correctElements, rubric) {
   const result = {
@@ -464,14 +470,13 @@ function calculateGrades(studentElements, correctElements, rubric) {
     _debug: {}
   };
 
-  // Track matched student IDs to find "Extras" later
   const matchedStudentIds = new Set();
   const entityMap = {}; 
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
     
-    // Extract multiplier (e.g., "2 x 15")
+    // Extract multiplier
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
     let multiplier = 1;
     let expectedCount = 0;
@@ -504,7 +509,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
         
         if (match) {
           correctCount++;
-          // 🆕 SMART FEEDBACK: If names differ (Car vs Cars), record it for the AI!
+          // Smart Feedback: Name mismatch (e.g. Car vs Cars)
           if (match.name !== ce.name) {
              correctItems.push(`${ce.name} (Note: You wrote '${match.name}')`);
           } else {
@@ -518,7 +523,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
         }
       });
 
-      // Find Extra/Wrong Entities
+      // Find Extras
       studentEntities.forEach(se => {
           if (!matchedStudentIds.has(se.id)) {
               incorrect.push(`Extra/Incorrect Entity: ${se.name}`);
@@ -527,7 +532,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING
+    // B. ATTRIBUTE & KEY MATCHING (THE FIX IS HERE)
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
       const isPK = categoryLower.includes('primary') || categoryLower.includes('key');
@@ -541,7 +546,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
       correctAttrs.forEach(ca => {
         const match = studentAttrs.find(sa => {
           const nameMatch = areStringsSemanticallySimilar(sa.name, ca.name);
-          // Check if parent entity matches (using the map)
           const mappedParent = entityMap[sa.belongsTo] || sa.belongsTo;
           const parentMatch = areStringsSemanticallySimilar(mappedParent, ca.belongsTo);
           return nameMatch && parentMatch;
@@ -549,19 +553,34 @@ function calculateGrades(studentElements, correctElements, rubric) {
         
         if (match) {
           correctCount++;
-          // 🆕 SMART FEEDBACK for Attributes too
+          
+          // 🆕 SMART FEEDBACK: Check for Type Mismatch (e.g. Regular vs Derived)
+          let feedbackNote = "";
+          
+          // 1. Name Check (e.g. typo)
           if (match.name !== ca.name) {
-             correctItems.push(`${ca.name} (Note: '${match.name}')`);
+            feedbackNote += `(Note: '${match.name}') `;
+          }
+          
+          // 2. SubType Check (Solid vs Dashed vs Double)
+          // We ignore this check for PKs because they are handled by the category filter
+          if (!isPK && match.subType !== ca.subType) {
+            feedbackNote += `(⚠️ Warning: You drew this as '${match.subType}', but it should be '${ca.subType}') `;
+          }
+
+          if (feedbackNote) {
+             correctItems.push(`${ca.name} ${feedbackNote.trim()}`);
           } else {
              correctItems.push(ca.name);
           }
+          
           matchedStudentIds.add(match.id);
         } else {
           missing.push(`${ca.name} in ${ca.belongsTo}`);
         }
       });
 
-      // Find Extra Attributes
+      // Find Extras
       studentAttrs.forEach(sa => {
           if (!matchedStudentIds.has(sa.id)) {
               incorrect.push(`Unexpected attribute: '${sa.name}' in ${sa.belongsTo}`);
@@ -570,7 +589,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // C. RELATIONSHIP MATCHING
+    // C. RELATIONSHIP MATCHING (FINAL POLISH)
     // ===========================
     else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
       const correctRels = correctElements.filter(e => e.type === 'relationship');
@@ -590,12 +609,25 @@ function calculateGrades(studentElements, correctElements, rubric) {
         
         if (match) {
           correctCount++;
-          // 🆕 SMART FEEDBACK for Relationships
+          
+          let feedbackNote = "";
+          
+          // 1. Name Check
           if (match.name !== cr.name) {
-             correctItems.push(`${cr.name} (Note: '${match.name}')`);
+             feedbackNote += `(Note: '${match.name}') `;
+          }
+
+          // 2. SubType Check (Single vs Double Diamond) - NEW!
+          if (match.subType !== cr.subType) {
+             feedbackNote += `(⚠️ Warning: You drew this as '${match.subType}', but it should be '${cr.subType}') `;
+          }
+
+          if (feedbackNote) {
+             correctItems.push(`${cr.name} ${feedbackNote.trim()}`);
           } else {
              correctItems.push(cr.name);
           }
+          
           matchedStudentIds.add(match.id);
         } else {
           missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
@@ -608,7 +640,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
           }
       });
     }
-
     // ===========================
     // D. CARDINALITY 
     // ===========================
@@ -617,7 +648,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
       const studentRels = studentElements.filter(e => e.type === 'relationship');
       
       const relationshipCount = correctRels.length;
-      // Heuristic: If we expect many checks per relationship, check min/max separately
       const checksPerRelationship = expectedCount / relationshipCount;
       const useMinMax = (checksPerRelationship >= 3.5);
 
@@ -637,7 +667,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
             const studentToVal = isFlipped ? sr.cardinalityFrom : sr.cardinalityTo;
 
             if (useMinMax) {
-                // Check Min/Max separately
                 const [cFromMin, cFromMax] = (cr.cardinalityFrom || '..').split('..');
                 const [cToMin, cToMax] = (cr.cardinalityTo || '..').split('..');
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
@@ -656,7 +685,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
                 else incorrect.push(`${cr.name} end-max (Exp:${cToMax} Found:${sToMax})`);
 
             } else {
-               // Whole check (simpler)
                if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
                    correctCount++; correctItems.push(`${cr.name} start`);
                } else {
@@ -675,7 +703,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
       });
     }
 
-    // Final Calculation
     if (!multiplierMatch && expectedCount > 0) multiplier = maxPoints / expectedCount;
     const earned = Math.min(correctCount * multiplier, maxPoints);
     
