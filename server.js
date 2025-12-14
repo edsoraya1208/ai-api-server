@@ -688,19 +688,39 @@ function calculateGrades(studentElements, correctElements, rubric) {
   return result;
 }
 
-// HELPER: Fuzzy String Matcher (Replaces normalizeString)
+// HELPER: Fuzzy String Matcher (Safe Version)
 function areStringsSemanticallySimilar(str1, str2) {
   if (!str1 || !str2) return false;
-  // 1. Direct match
-  if (str1.trim().toLowerCase() === str2.trim().toLowerCase()) return true;
-  // 2. Normalize (remove _ and spaces)
-  const clean1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const clean2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (clean1 === clean2) return true;
-  // 3. Word Bag (handles "Agent Insurance" vs "Insurance Agent")
+  
+  // 1. Clean them up (lowercase, remove spaces/underscores)
+  const s1 = str1.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const s2 = str2.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // 2. Exact Match (The Old Way - still runs first!)
+  if (s1 === s2) return true;
+
+  // 3. The "Plural Fix" (SAFE MODE)
+  // Only checks if one is exactly the other + 's'
+  // We check length > 3 to avoid breaking short acronyms
+  if (s1.length > 3 && s2.length > 3) {
+    if (s1 === s2 + 's') return true; // car == cars
+    if (s2 === s1 + 's') return true; // cars == car
+    if (s1 === s2 + 'es') return true; // bus == buses
+    if (s2 === s1 + 'es') return true; // buses == bus
+  }
+
+  // 4. The "Past Tense Fix" (Assign vs Assigned)
+  if (s1.length > 3 && s2.length > 3) {
+    if (s1.endsWith('ed') && s1.slice(0, -2) === s2) return true; // assigned == assign
+    if (s2.endsWith('ed') && s2.slice(0, -2) === s1) return true; // assign == assigned
+    if (s1.endsWith('d') && s1.slice(0, -1) === s2) return true; // used == use
+    if (s2.endsWith('d') && s2.slice(0, -1) === s1) return true; // use == used
+  }
+
+  // 5. Word Bag (The "Driver ID" vs "ID Driver" Fix - still kept!)
   const words1 = str1.toLowerCase().split(/[\s_]+/).sort().join('');
   const words2 = str2.toLowerCase().split(/[\s_]+/).sort().join('');
   if (words1 === words2) return true;
-  
+
   return false;
 }
