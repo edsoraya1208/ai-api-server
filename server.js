@@ -464,14 +464,14 @@ function calculateGrades(studentElements, correctElements, rubric) {
     _debug: {}
   };
 
-  // NEW: Track which student elements have been successfully matched
+  // Track matched student IDs to find "Extras" later
   const matchedStudentIds = new Set();
-
   const entityMap = {}; 
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
     
+    // Extract multiplier (e.g., "2 x 15")
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
     let multiplier = 1;
     let expectedCount = 0;
@@ -504,15 +504,21 @@ function calculateGrades(studentElements, correctElements, rubric) {
         
         if (match) {
           correctCount++;
-          correctItems.push(ce.name);
+          // 🆕 SMART FEEDBACK: If names differ (Car vs Cars), record it for the AI!
+          if (match.name !== ce.name) {
+             correctItems.push(`${ce.name} (Note: You wrote '${match.name}')`);
+          } else {
+             correctItems.push(ce.name);
+          }
+          
           entityMap[match.name] = ce.name;
-          matchedStudentIds.add(match.id); // NEW: Mark as used
+          matchedStudentIds.add(match.id);
         } else {
           missing.push(ce.name);
         }
       });
 
-      // NEW: Find Student Entities that were NOT matched (The "Wrong" ones)
+      // Find Extra/Wrong Entities
       studentEntities.forEach(se => {
           if (!matchedStudentIds.has(se.id)) {
               incorrect.push(`Extra/Incorrect Entity: ${se.name}`);
@@ -535,6 +541,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
       correctAttrs.forEach(ca => {
         const match = studentAttrs.find(sa => {
           const nameMatch = areStringsSemanticallySimilar(sa.name, ca.name);
+          // Check if parent entity matches (using the map)
           const mappedParent = entityMap[sa.belongsTo] || sa.belongsTo;
           const parentMatch = areStringsSemanticallySimilar(mappedParent, ca.belongsTo);
           return nameMatch && parentMatch;
@@ -542,14 +549,19 @@ function calculateGrades(studentElements, correctElements, rubric) {
         
         if (match) {
           correctCount++;
-          correctItems.push(`${ca.name} (${ca.belongsTo})`);
-          matchedStudentIds.add(match.id); // NEW: Mark as used
+          // 🆕 SMART FEEDBACK for Attributes too
+          if (match.name !== ca.name) {
+             correctItems.push(`${ca.name} (Note: '${match.name}')`);
+          } else {
+             correctItems.push(ca.name);
+          }
+          matchedStudentIds.add(match.id);
         } else {
           missing.push(`${ca.name} in ${ca.belongsTo}`);
         }
       });
 
-      // NEW: Find Leftover Attributes (This catches "purposes" when we wanted "purpose")
+      // Find Extra Attributes
       studentAttrs.forEach(sa => {
           if (!matchedStudentIds.has(sa.id)) {
               incorrect.push(`Unexpected attribute: '${sa.name}' in ${sa.belongsTo}`);
@@ -578,14 +590,18 @@ function calculateGrades(studentElements, correctElements, rubric) {
         
         if (match) {
           correctCount++;
-          correctItems.push(`${cr.name} (${cr.from} ↔ ${cr.to})`);
-          matchedStudentIds.add(match.id); // NEW: Mark as used
+          // 🆕 SMART FEEDBACK for Relationships
+          if (match.name !== cr.name) {
+             correctItems.push(`${cr.name} (Note: '${match.name}')`);
+          } else {
+             correctItems.push(cr.name);
+          }
+          matchedStudentIds.add(match.id);
         } else {
           missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
         }
       });
       
-      // NEW: Find Leftover Relationships
       studentRels.forEach(sr => {
           if (!matchedStudentIds.has(sr.id)) {
               incorrect.push(`Extra relationship: ${sr.name}`);
@@ -601,6 +617,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
       const studentRels = studentElements.filter(e => e.type === 'relationship');
       
       const relationshipCount = correctRels.length;
+      // Heuristic: If we expect many checks per relationship, check min/max separately
       const checksPerRelationship = expectedCount / relationshipCount;
       const useMinMax = (checksPerRelationship >= 3.5);
 
@@ -620,14 +637,14 @@ function calculateGrades(studentElements, correctElements, rubric) {
             const studentToVal = isFlipped ? sr.cardinalityFrom : sr.cardinalityTo;
 
             if (useMinMax) {
-                // OPTION B: Min/Max Split
+                // Check Min/Max separately
                 const [cFromMin, cFromMax] = (cr.cardinalityFrom || '..').split('..');
                 const [cToMin, cToMax] = (cr.cardinalityTo || '..').split('..');
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
                 const [sToMin, sToMax] = (studentToVal || '..').split('..');
 
                 if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { correctCount++; correctItems.push(`${cr.name} start-min`); }
-                else incorrect.push(`${cr.name} start-min (Exp:${cFromMin} Found:${sFromMin})`); // NEW DETAILED LOG
+                else incorrect.push(`${cr.name} start-min (Exp:${cFromMin} Found:${sFromMin})`);
 
                 if (areStringsSemanticallySimilar(sFromMax, cFromMax)) { correctCount++; correctItems.push(`${cr.name} start-max`); }
                 else incorrect.push(`${cr.name} start-max (Exp:${cFromMax} Found:${sFromMax})`);
@@ -639,33 +656,26 @@ function calculateGrades(studentElements, correctElements, rubric) {
                 else incorrect.push(`${cr.name} end-max (Exp:${cToMax} Found:${sToMax})`);
 
             } else {
-               // OPTION A: Whole match
-               // Check From
+               // Whole check (simpler)
                if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
-                   correctCount++; 
-                   correctItems.push(`${cr.name} start`);
+                   correctCount++; correctItems.push(`${cr.name} start`);
                } else {
-                   // NEW: Detailed mismatch log
                    incorrect.push(`${cr.name} start (Exp:${cr.cardinalityFrom} Found:${studentFromVal})`);
                }
                
-               // Check To
                if ((studentToVal || '').includes(cr.cardinalityTo) || (cr.cardinalityTo || '').includes(studentToVal)) {
-                   correctCount++; 
-                   correctItems.push(`${cr.name} end`);
+                   correctCount++; correctItems.push(`${cr.name} end`);
                } else {
-                   // NEW: Detailed mismatch log
                    incorrect.push(`${cr.name} end (Exp:${cr.cardinalityTo} Found:${studentToVal})`);
                }
             }
          } else {
-             // Relationship missing entirely means cardinality is also missing
              missing.push(`Cardinality for ${cr.name}`);
          }
       });
     }
 
-    // Calc Score
+    // Final Calculation
     if (!multiplierMatch && expectedCount > 0) multiplier = maxPoints / expectedCount;
     const earned = Math.min(correctCount * multiplier, maxPoints);
     
