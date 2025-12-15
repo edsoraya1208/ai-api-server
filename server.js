@@ -337,16 +337,7 @@ app.post('/autograde-erd', async (req, res) => {
    // ===========================
     // STEP 2: AI GENERATES FEEDBACK ONLY (SAFE MODE)
     // ===========================
-    
-    // 1. Prepare Context (Keep this so it can explain "Why" derived attributes need dashed ovals)
-    const contextList = correctAnswer.elements.map(e => `${e.name} (${e.type})`).join(', ');
-    const rubricHints = rubricStructured ? rubricStructured.criteria.map(c => c.description).join('; ') : '';
-
     const prompt = `You are an expert Database Professor grading an ERD.
-    
-    REFERENCE CONTEXT (Use this ONLY for defining concepts, NOT for checking if items are missing):
-    - Full Correct Schema: [${contextList}]
-    - Rubric Criteria: [${rubricHints}]
     
     INPUT DATA:
     Total Score: ${grading.totalScore} / ${grading.maxScore}
@@ -357,30 +348,30 @@ app.post('/autograde-erd', async (req, res) => {
     ITEMS MARKED MISSING:
     ${JSON.stringify(grading.missingElements)}
 
-    ITEMS MARKED INCORRECT (INCLUDES EXTRAS):
+    ITEMS MARKED INCORRECT:
     ${JSON.stringify(grading.incorrectElements)}
     
     CRITICAL INSTRUCTIONS:
-    1. **Strict Source of Truth (DO NOT HALLUCINATE)**: 
-       - **Strengths**: You MUST copy directly from "ITEMS MARKED CORRECT".
-       - **Missing**: You MUST copy directly from "ITEMS MARKED MISSING". 
-       - **Needs Improvement**: You MUST copy directly from "ITEMS MARKED INCORRECT".
-       - **RULE**: Do NOT look at the "REFERENCE CONTEXT" to decide if something is missing. If the input data says it's "Incorrect", put it in "Needs Improvement", NOT "Missing".
+    1. **Grouping**: 
+       - In the "correct" list, group simple items by category on one line.
+       - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text. **DO NOT** remove the note to make it look "clean".
+       - Example Output: "Entities: CUSTOMER, RENTAL, CAR (Note: You wrote 'Cars')"
+    
+    2. **Concise Educational Explanations**:
+       - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
+       - **Derived Attributes**: Briefly explain they are calculated from other data and must use dashed ovals.
+       - **Cardinality**: Briefly note the difference between Mandatory (1) and Optional (0) participation.
+       - **Multivalued**: Briefly mention single ovals cannot hold multiple values.
+       - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
+       
+       ✅ ADD THIS LINE BELOW:
+       - **Extra/Unexpected Elements**: If the 'ITEMS MARKED INCORRECT' list contains "Extra" or "Unexpected", you MUST include them in the output. Feedback: "This element is not part of the solution requirements."
 
-    2. **Formatting (MANDATORY)**:
-       - **Single Line Per Category**: You MUST list items comma-separated on ONE line per category.
-       - ✅ CORRECT FORMAT: 
-         Entities: Car, Customer, Rental
+    3. **SAFETY GUARDRAIL**:
+       - **DO NOT** invent business rules.
+       - Use phrases like "This implies..." rather than "The requirements stated...".
 
-    3. **Tailored Educational Explanations (Max 2 sentences)**:
-       - **Derived Attributes**: Explain they are calculated from other data (check REFERENCE CONTEXT for source attributes) AND must use **dashed ovals**.
-       - **Cardinality**: Explain if mandatory (1) or optional (0) based on context.
-        **Multivalued**: Mention that single ovals cannot hold multiple values; double ovals are required, based on the context.
-       - **Extras**: Explain why the extra element is unnecessary.
-       - **Style**: Be helpful and specific.
-
-    4. **Safety**:
-       - **IF AN ITEM HAS A NOTE**: (e.g. "Car (Note: You wrote 'Cars')"), keep the note exactly as is.
+    4. **Tone**: Encouraging but direct.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
@@ -390,11 +381,11 @@ app.post('/autograde-erd', async (req, res) => {
       "feedback": {
         "correct": ["List of strengths"],
         "missing": ["List of missing items"],
-        "incorrect": ["List of errors with tailored explanation"]
+        "incorrect": ["List of errors with 1-2 sentence educational explanation"]
       },
       "overallComment": "Summary comment."
     }`;
-
+    
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
