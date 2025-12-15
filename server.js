@@ -365,7 +365,7 @@ app.post('/autograde-erd', async (req, res) => {
        - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
        
        ✅ ADD THIS LINE BELOW:
-       - **Extra/Unexpected Elements**: If the 'ITEMS MARKED INCORRECT' list contains "Extra" or "Unexpected", you MUST include them in the output. Feedback: "This element is not part of the solution requirements."
+       - **Extra/Unexpected Elements**: If the 'ITEMS MARKED INCORRECT' list contains "Extra" or "Unexpected", you MUST include them in the output. Feedback: "This element is not part of the solution requirements." explain briefly why it should not be included.
 
     3. **SAFETY GUARDRAIL**:
        - **DO NOT** invent business rules.
