@@ -357,15 +357,22 @@ app.post('/autograde-erd', async (req, res) => {
        - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text. **DO NOT** remove the note to make it look "clean".
        - Example Output: "Entities: CUSTOMER, RENTAL, CAR (Note: You wrote 'Cars')"
     
-    2. **Concise Educational Explanations**:
+   2. **Concise Educational Explanations**:
        - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
+       
        - **Derived Attributes**: Briefly explain they are calculated from other data and must use dashed ovals.
-       - **Cardinality**: Briefly note the difference between Mandatory (1) and Optional (0) participation.
        - **Multivalued**: Briefly mention single ovals cannot hold multiple values.
        - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
-       
-       ✅ ADD THIS LINE BELOW:
-       - **Extra/Unexpected Elements**: If the 'ITEMS MARKED INCORRECT' list contains "Extra" or "Unexpected", you MUST include them in the output. Feedback: "This element is not part of the solution requirements." explain briefly why it should not be included.
+
+       ✅ SMART CARDINALITY LOGIC:
+       - **Cardinality**: Look at the Entity name in the error (e.g., "towards Patient"). Explain the logic using that specific entity.
+         - If Exp: 0, Found: 1 -> "Expected 0 (Optional): A [Other Entity] can exist without a [Target Entity]."
+         - If Exp: 1, Found: 0 -> "Expected 1 (Mandatory): A [Other Entity] must have at least one [Target Entity] to exist."
+
+       ✅ EXTRA ELEMENTS LOGIC (REQUIRED TO SHOW EXTRAS):
+       - **Extra/Unexpected Elements**: If the 'ITEMS MARKED INCORRECT' list contains "Extra", "Unexpected", or "Incorrect Type", you MUST include them in the output. 
+         - For "Extra": Feedback: "This element is not part of the solution requirements."
+         - For "Incorrect Type": Explain why the shape used is wrong (e.g. "Diamond is for relationships").
 
     3. **SAFETY GUARDRAIL**:
        - **DO NOT** invent business rules.
@@ -673,17 +680,18 @@ function calculateGrades(studentElements, correctElements, rubric) {
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
                 const [sToMin, sToMax] = (studentToVal || '..').split('..');
 
+                // ✅ UPDATE 1: Add context to error messages so AI understands them
                 if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { correctCount++; correctItems.push(`${cr.name} start-min`); }
-                else incorrect.push(`${cr.name} start-min (Exp:${cFromMin} Found:${sFromMin})`);
+                else incorrect.push(`${cr.name} (towards ${cr.from}) min-cardinality (Exp:${cFromMin} Found:${sFromMin})`);
 
                 if (areStringsSemanticallySimilar(sFromMax, cFromMax)) { correctCount++; correctItems.push(`${cr.name} start-max`); }
-                else incorrect.push(`${cr.name} start-max (Exp:${cFromMax} Found:${sFromMax})`);
+                else incorrect.push(`${cr.name} (towards ${cr.from}) max-cardinality (Exp:${cFromMax} Found:${sFromMax})`);
 
                 if (areStringsSemanticallySimilar(sToMin, cToMin)) { correctCount++; correctItems.push(`${cr.name} end-min`); }
-                else incorrect.push(`${cr.name} end-min (Exp:${cToMin} Found:${sToMin})`);
+                else incorrect.push(`${cr.name} (towards ${cr.to}) min-cardinality (Exp:${cToMin} Found:${sToMin})`);
 
                 if (areStringsSemanticallySimilar(sToMax, cToMax)) { correctCount++; correctItems.push(`${cr.name} end-max`); }
-                else incorrect.push(`${cr.name} end-max (Exp:${cToMax} Found:${sToMax})`);
+                else incorrect.push(`${cr.name} (towards ${cr.to}) max-cardinality (Exp:${cToMax} Found:${sToMax})`);
 
             } else {
                if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
