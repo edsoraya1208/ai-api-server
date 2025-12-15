@@ -338,13 +338,13 @@ app.post('/autograde-erd', async (req, res) => {
     // STEP 2: AI GENERATES FEEDBACK ONLY (SAFE MODE)
     // ===========================
     
-    // 1. Prepare "Hints" (Dynamic Context from the Answer Key)
+    // 1. Prepare Context (Keep this so it can explain "Why" derived attributes need dashed ovals)
     const contextList = correctAnswer.elements.map(e => `${e.name} (${e.type})`).join(', ');
     const rubricHints = rubricStructured ? rubricStructured.criteria.map(c => c.description).join('; ') : '';
 
     const prompt = `You are an expert Database Professor grading an ERD.
     
-    REFERENCE CONTEXT (Use this to tailor your explanations):
+    REFERENCE CONTEXT (Use this ONLY for defining concepts, NOT for checking if items are missing):
     - Full Correct Schema: [${contextList}]
     - Rubric Criteria: [${rubricHints}]
     
@@ -361,26 +361,26 @@ app.post('/autograde-erd', async (req, res) => {
     ${JSON.stringify(grading.incorrectElements)}
     
     CRITICAL INSTRUCTIONS:
-    1. **Categorization**: 
-       - **Strengths**: Items from "ITEMS MARKED CORRECT".
-       - **Missing**: Items from "ITEMS MARKED MISSING".
-       - **Needs Improvement**: Items from "ITEMS MARKED INCORRECT".
-       - **IMPORTANT**: If the input says "Extra..." or "Unexpected...", you **MUST** include it in "Needs Improvement".
+    1. **Strict Source of Truth (DO NOT HALLUCINATE)**: 
+       - **Strengths**: You MUST copy directly from "ITEMS MARKED CORRECT".
+       - **Missing**: You MUST copy directly from "ITEMS MARKED MISSING". 
+       - **Needs Improvement**: You MUST copy directly from "ITEMS MARKED INCORRECT".
+       - **RULE**: Do NOT look at the "REFERENCE CONTEXT" to decide if something is missing. If the input data says it's "Incorrect", put it in "Needs Improvement", NOT "Missing".
 
-    2. **Tailored Educational Explanations (Max 2 sentences)**:
+    2. **Formatting (MANDATORY)**:
+       - **Single Line Per Category**: You MUST list items comma-separated on ONE line per category.
+       - ✅ CORRECT FORMAT: 
+         Entities: Car, Customer, Rental
+
+    3. **Tailored Educational Explanations (Max 2 sentences)**:
        - **Derived Attributes**: Explain they are calculated from other data (check REFERENCE CONTEXT for source attributes) AND must use **dashed ovals**.
-       - **Cardinality**: Explain if the relationship implies mandatory (1) or optional (0) participation based on the scenario.
-       - **Multivalued**: Mention that single ovals cannot hold multiple values; double ovals are required.
-       - **Extras**: Explain why the specific extra element is unnecessary for this specific scenario.
+       - **Cardinality**: Explain if mandatory (1) or optional (0) based on context.
+        **Multivalued**: Mention that single ovals cannot hold multiple values; double ovals are required, based on the context.
+       - **Extras**: Explain why the extra element is unnecessary.
        - **Style**: Be helpful and specific.
 
-    3. **Grouping**: 
-       - Group simple correct items by category on one line.
-       - **IF AN ITEM HAS A NOTE**: (e.g. "Car (Note: You wrote 'Cars')"), print the note exactly.
-
-    4. **SAFETY GUARDRAIL**:
-       - **DO NOT** invent business rules.
-       - Use phrases like "This implies..." rather than "The requirements stated...".
+    4. **Safety**:
+       - **IF AN ITEM HAS A NOTE**: (e.g. "Car (Note: You wrote 'Cars')"), keep the note exactly as is.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
@@ -394,7 +394,7 @@ app.post('/autograde-erd', async (req, res) => {
       },
       "overallComment": "Summary comment."
     }`;
-    
+
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
