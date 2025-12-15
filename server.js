@@ -334,10 +334,19 @@ app.post('/autograde-erd', async (req, res) => {
     console.log('📊 Calculated scores:', grading._debug);
 
    
-    // ===========================
+   // ===========================
     // STEP 2: AI GENERATES FEEDBACK ONLY (SAFE MODE)
     // ===========================
+    
+    // 1. Prepare "Hints" (Dynamic Context from the Answer Key)
+    const contextList = correctAnswer.elements.map(e => `${e.name} (${e.type})`).join(', ');
+    const rubricHints = rubricStructured ? rubricStructured.criteria.map(c => c.description).join('; ') : '';
+
     const prompt = `You are an expert Database Professor grading an ERD.
+    
+    REFERENCE CONTEXT (Use this to tailor your explanations):
+    - Full Correct Schema: [${contextList}]
+    - Rubric Criteria: [${rubricHints}]
     
     INPUT DATA:
     Total Score: ${grading.totalScore} / ${grading.maxScore}
@@ -348,27 +357,30 @@ app.post('/autograde-erd', async (req, res) => {
     ITEMS MARKED MISSING:
     ${JSON.stringify(grading.missingElements)}
 
-    ITEMS MARKED INCORRECT:
+    ITEMS MARKED INCORRECT (INCLUDES EXTRAS):
     ${JSON.stringify(grading.incorrectElements)}
     
     CRITICAL INSTRUCTIONS:
-    1. **Grouping**: 
-       - In the "correct" list, group simple items by category on one line.
-       - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text. **DO NOT** remove the note to make it look "clean".
-       - Example Output: "Entities: CUSTOMER, RENTAL, CAR (Note: You wrote 'Cars')"
-    
-    2. **Concise Educational Explanations**:
-       - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
-       - **Derived Attributes**: Briefly explain they are calculated from other data and must use dashed ovals.
-       - **Cardinality**: Briefly note the difference between Mandatory (1) and Optional (0) participation.
-       - **Multivalued**: Briefly mention single ovals cannot hold multiple values.
-       - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
+    1. **Categorization**: 
+       - **Strengths**: Items from "ITEMS MARKED CORRECT".
+       - **Missing**: Items from "ITEMS MARKED MISSING".
+       - **Needs Improvement**: Items from "ITEMS MARKED INCORRECT".
+       - **IMPORTANT**: If the input says "Extra..." or "Unexpected...", you **MUST** include it in "Needs Improvement".
 
-    3. **SAFETY GUARDRAIL**:
+    2. **Tailored Educational Explanations (Max 2 sentences)**:
+       - **Derived Attributes**: Explain they are calculated from other data (check REFERENCE CONTEXT for source attributes) AND must use **dashed ovals**.
+       - **Cardinality**: Explain if the relationship implies mandatory (1) or optional (0) participation based on the scenario.
+       - **Multivalued**: Mention that single ovals cannot hold multiple values; double ovals are required.
+       - **Extras**: Explain why the specific extra element is unnecessary for this specific scenario.
+       - **Style**: Be helpful and specific.
+
+    3. **Grouping**: 
+       - Group simple correct items by category on one line.
+       - **IF AN ITEM HAS A NOTE**: (e.g. "Car (Note: You wrote 'Cars')"), print the note exactly.
+
+    4. **SAFETY GUARDRAIL**:
        - **DO NOT** invent business rules.
        - Use phrases like "This implies..." rather than "The requirements stated...".
-
-    4. **Tone**: Encouraging but direct.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
@@ -378,7 +390,7 @@ app.post('/autograde-erd', async (req, res) => {
       "feedback": {
         "correct": ["List of strengths"],
         "missing": ["List of missing items"],
-        "incorrect": ["List of errors with 1-2 sentence educational explanation"]
+        "incorrect": ["List of errors with tailored explanation"]
       },
       "overallComment": "Summary comment."
     }`;
