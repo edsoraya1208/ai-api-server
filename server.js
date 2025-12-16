@@ -360,8 +360,8 @@ app.post('/autograde-erd', async (req, res) => {
    2. **Concise Educational Explanations**:
        - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
        
-       - **Derived Attributes**: Briefly explain they are calculated from other data and must use dashed ovals.
-       - **Multivalued**: Briefly mention single ovals cannot hold multiple values.
+       - **Derived Attributes**: Explain they are calculated from other specific attributes found in the diagram (look at the 'Correct' list and explicitly name the likely source attributes) and must use dashed ovals.
+       - **Multivalued**: Look at the attribute name (e.g. "Phone") and briefly explain why it allows multiple entries (e.g. "A person can have multiple phone numbers").
        - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
 
        ✅ SMART CARDINALITY LOGIC:
