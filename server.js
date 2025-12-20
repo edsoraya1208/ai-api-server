@@ -90,10 +90,9 @@ CARDINALITY MAPPING (based on what you see)
    - **MISSING MAX** (e.g. "0.." with no max) -> "0..none"
 
    - **VISUAL CHECK**: 
-     - You MUST map the (cardinality) to the entity it is PHYSICALLY CLOSEST to.
-     - If you see "0", "1", "M", or "N" touching the line -> Map it (see rules above).
-     - If you see **NO TEXT**, NO numbers, and NO letters touching the line -> You MUST return "none..none".
+     - IMPORTANT: If you see **NO TEXT**, NO numbers, and NO letters touching the line -> You MUST return "none..none".
      - **DO NOT GUESS**. Do not assume "1" or "M" just because a line exists. Empty space = "none..none".
+     - DO NOT ASSIGN THE CARDINALITY TO THE WRONG ENTITY, (ASSIGN TO THE ENTITY CLOSEST TO IT)
 
 REJECT IF (set isERD=false and provide rejectionReason):
 - EERD features: (d) symbols, triangles with "d", ISA relationships, subclass/superclass hierarchies → "This is an EERD (Enhanced ERD), not a basic ERD"
