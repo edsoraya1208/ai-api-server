@@ -90,6 +90,7 @@ CARDINALITY MAPPING (based on what you see)
    - **MISSING MAX** (e.g. "0.." with no max) -> "0..none"
 
    - **VISUAL CHECK**: 
+     - You MUST map the (cardinality) to the entity it is PHYSICALLY CLOSEST to.
      - If you see "0", "1", "M", or "N" touching the line -> Map it (see rules above).
      - If you see **NO TEXT**, NO numbers, and NO letters touching the line -> You MUST return "none..none".
      - **DO NOT GUESS**. Do not assume "1" or "M" just because a line exists. Empty space = "none..none".
