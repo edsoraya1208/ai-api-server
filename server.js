@@ -62,7 +62,7 @@ app.post('/detect-erd', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+        model: 'google/gemini-2.5-flash',
         messages: [{
           role: 'user',
           content: [
