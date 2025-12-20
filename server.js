@@ -71,7 +71,7 @@ app.post('/detect-erd', async (req, res) => {
               text: `Analyze this ERD diagram. Return ONLY valid JSON, no markdown.
 
 CRITICAL DETECTION RULES (MUST FOLLOW):
-1. PRIMARY KEYS have SINGLE UNDERLINE text - dont rely on name alone, look for underline
+1. PRIMARY KEYS have SINGLE UNDERLINE text - name with "id" doesn't guarantee primary key, unless it is UNDERLINED
 2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
 3. CARDINALITY must be read from BOTH sides of relationship 
    - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
@@ -79,16 +79,15 @@ CRITICAL DETECTION RULES (MUST FOLLOW):
    - from="EntityA" to="EntityB" means: EntityA's cardinality goes in cardinalityFrom, EntityB's in cardinalityTo
    - Example: Patient(0,M)─visit─(1,1)Doctor → from="Patient", cardinalityFrom="0..M", to="Doctor", cardinalityTo="1..1"
 
-CARDINALITY MAPPING:
-- (0,M) or M or 0..* → "0..M" (optional, many)
-- (1,M) or 1..* → "1..M" (mandatory, at least one)
-- (0,1) or 0..1 → "0..1" (optional, at most one) 
-- (1,1) or just 1 → "1..1" (mandatory, exactly one)
-- If only max shown (e.g. JUST "M" or "1"): STRICTLY assume min=0 → M="0..M", 1="0..1"
-- If both min max cardinality MISSING completely near entity: return "none..none"
-  - VISUAL CHECK: No number? No letter? -> "none..none".
-- If only min found (e.g just "1"): return "0..none" or "1..none" (missing max)
-- ⚠️ Read CAREFULLY: "M 1" means min=1 max=M → "1..M", NOT "0..M"
+CARDINALITY MAPPING (based on what you see)
+   - "0..M" (or 0,M) -> "0..M"
+   - "1..M" (or 1,M) -> "1..M"
+   - "0..1" (or 0,1) -> "0..1"
+   - "1..1" (or 1,1) -> "1..1"
+   - "M" alone -> "0..M"
+   - "1" alone -> "0..1"
+   - **MISSING / EMPTY** -> "none..none"
+   - **MISSING MAX** (e.g. "0.." with no max) -> "0..none"
 
 REJECT IF (set isERD=false and provide rejectionReason):
 - EERD features: (d) symbols, triangles with "d", ISA relationships, subclass/superclass hierarchies → "This is an EERD (Enhanced ERD), not a basic ERD"
