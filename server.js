@@ -138,6 +138,10 @@ REQUIRED FIELDS:
 - If cardinality OR attribute border unclear → max confidence 75
 - If NOT an ERD: MUST include "rejectionReason" explaining what it is instead
 
+AVOID COMMON MISTAKES:
+1. If an attribute name contains "ID" but has NO physical underline, NEVER EVER RETURN AS PK.
+2. If a relationship line has no visible text (min max cardinality), you MUST ALWAYS return "none..none" for cardinality.
+
 Return ONLY the JSON object.`
             },
             {
