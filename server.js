@@ -71,7 +71,7 @@ app.post('/detect-erd', async (req, res) => {
               text: `Analyze this ERD diagram. Return ONLY valid JSON, no markdown.
 
 CRITICAL DETECTION RULES (MUST FOLLOW):
-1. PRIMARY KEYS are UNDERLINED text - dont rely on name alone, look for underline
+1. PRIMARY KEYS have SINGLE UNDERLINE text - dont rely on name alone, look for underline
 2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
 3. CARDINALITY must be read from BOTH sides of relationship 
    - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
@@ -82,9 +82,11 @@ CRITICAL DETECTION RULES (MUST FOLLOW):
 CARDINALITY MAPPING:
 - (0,M) or M or 0..* → "0..M" (optional, many)
 - (1,M) or 1..* → "1..M" (mandatory, at least one)
-- (0,1) or 0..1 → "0..1" (optional, at most one)  
+- (0,1) or 0..1 → "0..1" (optional, at most one) 
 - (1,1) or just 1 → "1..1" (mandatory, exactly one)
-- If only max shown: M→"0..M", 1→"0..1"
+- If only max shown (e.g. JUST "M" or "1"): STRICTLY assume min=0 → M="0..M", 1="0..1"
+- If text MISSING completely near entity: return "none..none"
+- If only min found (e.g just "1"): return "0..none" or "1..none" (missing max)
 - ⚠️ Read CAREFULLY: "M 1" means min=1 max=M → "1..M", NOT "0..M"
 
 REJECT IF (set isERD=false and provide rejectionReason):
@@ -95,14 +97,14 @@ REJECT IF (set isERD=false and provide rejectionReason):
 - Other diagram types → "This is not an ERD diagram"
 
 DETECT ALL:
-✅ Entities (strong=single rectangle, weak=double rectangle)
+✅ Entities (strong=single rectangle, weak=double rectangle, associative=diamond inside rectangle))
 ✅ Relationships (strong=single diamond, weak=double diamond) with cardinality from BOTH sides
 ✅ Attributes with correct subTypes:
-   - primary_key: UNDERLINED text only (dont assume from name)
+   - primary_key: SINGLE UNDERLINED text only (dont assume from name)
    - multivalued: DOUBLE circle/oval border
    - derived: dashed circle/oval
    - composite: attribute connected to sub-attributes
-   - foreign_key: key from another entity
+   - foreign_key: (DOTTED LINE) key from another entity
    - regular: normal single circle/oval
 
 RESPONSE FORMAT FOR ERD:
@@ -123,7 +125,7 @@ RESPONSE FORMAT FOR NON-ERD:
 
 REQUIRED FIELDS:
 - Each element: unique "id" (el_1, el_2...)
-- Entities: "subType" is "strong" or "weak"
+- Entities: "subType" is "strong", "weak", or "associative"
 - Relationships: "subType" is "strong" or "weak", MUST have "from", "to", "cardinalityFrom", "cardinalityTo"
 - Attributes: MUST have "belongsTo" and "belongsToType" ("entity"/"relationship"/"attribute")
 - Confidence: 95-100 crystal clear | 80-94 clear | 70-79 requires interpretation | 60-69 unclear/guessing | <60 very uncertain
