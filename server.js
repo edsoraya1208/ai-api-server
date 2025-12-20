@@ -742,6 +742,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
 }
 
 // HELPER: Fuzzy String Matcher (Professional "Stemming" Version)
+// HELPER: Fuzzy String Matcher (The "Smart Bouncer")
 function areStringsSemanticallySimilar(str1, str2) {
   if (!str1 || !str2) return false;
   
@@ -749,37 +750,76 @@ function areStringsSemanticallySimilar(str1, str2) {
   const s1 = str1.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const s2 = str2.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 2. Exact Match (The Old Way - THIS RUNS FIRST, so it's safe!)
+  // 2. Exact Match (The fastest check)
   if (s1 === s2) return true;
 
-  // 3. The "Plural Fix" (Stemming)
-  // Logic: "Is one word just the other word + s?"
-  // We use >= 3 so it works for "CAR" (length 3) but skips "IS" (length 2)
+  // 3. The "Lazy Substring" Fix (Solves: rental_duration vs duration)
+  // Logic: If one is inside the other, and the shorter one is > 3 letters.
+  // We use >3 to prevent 'id' matching 'valid' or 'car' matching 'scary'.
+  if (s1.includes(s2) && s2.length > 3) return true;
+  if (s2.includes(s1) && s1.length > 3) return true;
+
+  // 4. The "Plural/Stemming" Fix (Solves: car vs cars, assign vs assigned)
   const MIN_LEN = 3; 
-
   if (s1.length >= MIN_LEN && s2.length >= MIN_LEN) {
-    if (s1 === s2 + 's') return true;  // car == cars
-    if (s2 === s1 + 's') return true;  // cars == car
-    if (s1 === s2 + 'es') return true; // bus == buses
-    if (s2 === s1 + 'es') return true; // buses == bus
-  }
-
-  // 4. The "Past Tense Fix" (Stemming for Verbs)
-  // Logic: "Is one word just the other word + ed or d?"
-  if (s1.length >= MIN_LEN && s2.length >= MIN_LEN) {
-    // Check for 'ed' suffix (assign vs assigned)
+    // Plurals
+    if (s1 === s2 + 's' || s2 === s1 + 's') return true;
+    if (s1 === s2 + 'es' || s2 === s1 + 'es') return true;
+    // Past Tense
     if (s1.endsWith('ed') && s1.slice(0, -2) === s2) return true;
     if (s2.endsWith('ed') && s2.slice(0, -2) === s1) return true;
-    
-    // Check for 'd' suffix (use vs used)
     if (s1.endsWith('d') && s1.slice(0, -1) === s2) return true;
     if (s2.endsWith('d') && s2.slice(0, -1) === s1) return true;
   }
 
-  // 5. Word Bag (Handles "Driver ID" vs "ID Driver")
+  // 5. Word Bag (Solves: "Driver ID" vs "ID Driver")
   const words1 = str1.toLowerCase().split(/[\s_]+/).sort().join('');
   const words2 = str2.toLowerCase().split(/[\s_]+/).sort().join('');
   if (words1 === words2) return true;
 
+  // 6. The "Typo" Fix (Solves: Pickip vs Pickup)
+  // Logic: Calculate distance. Allow 1 error for medium words, 2 for long words.
+  const len = Math.max(s1.length, s2.length);
+  const allowedErrors = len > 6 ? 2 : (len > 3 ? 1 : 0);
+
+  if (allowedErrors > 0) {
+    const dist = getLevenshteinDistance(s1, s2);
+    if (dist <= allowedErrors) return true;
+  }
+
   return false;
+}
+
+// HELPER: Levenshtein Distance (Counts character differences)
+// Returns the number of edits needed to turn string 'a' into string 'b'
+function getLevenshteinDistance(a, b) {
+  const matrix = [];
+
+  // 1. Setup grid
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  // 2. Fill grid
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1]; // No change needed
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // Substitution
+          Math.min(
+            matrix[i][j - 1] + 1,   // Insertion
+            matrix[i - 1][j] + 1    // Deletion
+          )
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
 }
