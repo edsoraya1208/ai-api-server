@@ -85,7 +85,8 @@ CARDINALITY MAPPING:
 - (0,1) or 0..1 → "0..1" (optional, at most one) 
 - (1,1) or just 1 → "1..1" (mandatory, exactly one)
 - If only max shown (e.g. JUST "M" or "1"): STRICTLY assume min=0 → M="0..M", 1="0..1"
-- If text MISSING completely near entity: return "none..none"
+- If both min max cardinality MISSING completely near entity: return "none..none"
+  - VISUAL CHECK: No number? No letter? -> "none..none".
 - If only min found (e.g just "1"): return "0..none" or "1..none" (missing max)
 - ⚠️ Read CAREFULLY: "M 1" means min=1 max=M → "1..M", NOT "0..M"
 
