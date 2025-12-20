@@ -89,6 +89,11 @@ CARDINALITY MAPPING (based on what you see)
    - **MISSING / EMPTY** -> "none..none"
    - **MISSING MAX** (e.g. "0.." with no max) -> "0..none"
 
+   - **VISUAL CHECK**: 
+     - If you see "0", "1", "M", or "N" touching the line -> Map it (see rules above).
+     - If you see **NO TEXT**, NO numbers, and NO letters touching the line -> You MUST return "none..none".
+     - **DO NOT GUESS**. Do not assume "1" or "M" just because a line exists. Empty space = "none..none".
+
 REJECT IF (set isERD=false and provide rejectionReason):
 - EERD features: (d) symbols, triangles with "d", ISA relationships, subclass/superclass hierarchies → "This is an EERD (Enhanced ERD), not a basic ERD"
 - Crow's Foot notation: >< |< symbols → "This uses Crow's Foot notation, not Chen notation ERD"
