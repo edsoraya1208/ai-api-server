@@ -214,6 +214,7 @@ app.post('/detect-rubric', async (req, res) => {
       return res.status(400).json({ error: 'Missing rubricText' });
     }
     console.log('🔍 Analyzing rubric text:', rubricText.substring(0, 100) + '...');
+    
     // Call OpenRouter AI with text-only prompt
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -225,6 +226,9 @@ app.post('/detect-rubric', async (req, res) => {
         model: 'meta-llama/llama-4-scout',
         messages: [{
           role: 'user',
+          // =================================================================
+          // 🛑 UPDATED PROMPT: Added "DECIMAL PRECISION" rules
+          // =================================================================
           content: `Analyze this grading rubric text. Return ONLY valid JSON with no markdown formatting.
 
 RUBRIC TEXT:
@@ -246,26 +250,30 @@ IF NOT AN ERD RUBRIC:
 {"isERDRubric":false,"reason":"This rubric is for SQL queries, not ERD diagrams"}
 
 IF IS AN ERD RUBRIC:
-{"isERDRubric":true,"totalPoints":100,"criteria":[{"category":"Entities","maxPoints":30,"description":"All entities correctly identified: 2 x 15 = 30"},{"category":"Relationships","maxPoints":30,"description":"Cardinality correct: 0.5 x 60 = 30"}],"notes":"Rubric emphasizes correct notation"}
+{"isERDRubric":true,"totalPoints":32,"criteria":[{"category":"Entities","maxPoints":30.5,"description":"All entities correctly identified: 30.5 points"},{"category":"Relationships","maxPoints":1.5,"description":"Cardinality correct: 1.5 points"}],"notes":"Rubric emphasizes correct notation"}
 
 CRITICAL RULES:
 - Return ONLY valid JSON, no markdown code blocks, no extra text
 - Each criterion MUST have: category, maxPoints, description
+- **DECIMAL PRECISION IS MANDATORY**: If a category is worth 1.5 points, 'maxPoints' MUST be 1.5. DO NOT ROUND to 1 or 2.
+- **CHECK YOUR MATH**: Ensure the sum of 'maxPoints' equals the total in the text.
 - **PRESERVE FORMULAS IN DESCRIPTION**: If rubric says "0.5 x 16 = 8", include "0.5 x 16" in the description field like "Cardinality correctly identified: 0.5 x 16"
 - If points not stated, estimate based on emphasis
 - Extract ALL grading aspects mentioned
 - Be concise but capture all important criteria`
-
+          // =================================================================
         }],
         temperature: 0.3,
         max_tokens: 2000
       })
     });
+    
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error('OpenRouter error:', errorText);
       throw new Error(`OpenRouter failed: ${aiResponse.statusText}`);
     }
+    
     const aiData = await aiResponse.json();
     // Validate AI response structure
     if (!aiData.choices || !aiData.choices[0] || !aiData.choices[0].message) {
@@ -273,14 +281,13 @@ CRITICAL RULES:
       throw new Error('AI returned invalid response structure');
     }
     const content = aiData.choices[0].message.content;
-    console.log('Raw AI response:', content.substring(0, 200) + '...'); // Log first 200 chars
+    console.log('Raw AI response:', content.substring(0, 200) + '...'); 
 
-    // Around line 240-260 in your server.js
     const cleanContent = content
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
-      .replace(/\n/g, ' ')           // ✅ Remove newlines
-      .replace(/\s+/g, ' ')          // ✅ Normalize whitespace
+      .replace(/\n/g, ' ')           
+      .replace(/\s+/g, ' ')          
       .trim();
 
     // Add retry logic with fallback
@@ -309,6 +316,24 @@ CRITICAL RULES:
     if (!result || typeof result !== 'object') {
       throw new Error('AI response is not a valid object');
     }
+
+    // =========================================================
+    // 🛑 STOP CRYING FIX: FORCE JAVASCRIPT TO DO THE MATH
+    // =========================================================
+    if (result.criteria && Array.isArray(result.criteria)) {
+      // 1. Use JavaScript (a calculator) to sum the points exactly
+      const realTotal = result.criteria.reduce((sum, item) => {
+        return sum + (parseFloat(item.maxPoints) || 0);
+      }, 0);
+
+      console.log(`🧮 AI said Total: ${result.totalPoints}`);
+      console.log(`✅ Actual Math is: ${realTotal}`);
+      
+      // 2. Overwrite the AI's guess with the real number
+      result.totalPoints = realTotal; 
+    }
+    // =========================================================
+
     console.log('✅ Rubric analysis complete');
     return res.status(200).json(result);
   } catch (error) {
