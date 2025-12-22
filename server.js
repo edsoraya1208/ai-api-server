@@ -608,14 +608,21 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING
+    // B. ATTRIBUTE & KEY MATCHING (SMART HYBRID)
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
-      // ✅ SMART CHANGE 2: Use Filter to handle "Primary Keys" vs "Attributes" vs "Multivalued"
       const targetCorrectElements = filterElementsByContext(correctElements, 'attribute', categoryLower);
       const studentAttrs = studentElements.filter(e => e.type === 'attribute');
       
-      const isPKSection = categoryLower.includes('primary') || categoryLower.includes('key');
+      // 1. DYNAMIC STRICT MODE CHECK
+      // If the rubric category title mentions a specific type, we enforce STRICT shape matching.
+      // If it's just "Attributes", we are LENIENT (name match only).
+      const isSpecificSection = categoryLower.includes('primary') || 
+                                categoryLower.includes('key') || 
+                                categoryLower.includes('derived') ||
+                                categoryLower.includes('composite') ||
+                                categoryLower.includes('multi'); // Covers 'multivalued'
+      
       if (!multiplierMatch) expectedCount = targetCorrectElements.length;
       
       targetCorrectElements.forEach(ca => {
@@ -627,18 +634,31 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
-          // STRICT TYPE CHECK (Skip for PKs as the filter already grabbed PKs)
-          if (!isPKSection && match.subType !== ca.subType) {
-             incorrect.push(`${ca.name} (Incorrect Type: You used '${match.subType}' oval, expected '${ca.subType}' oval)`);
+          // LOGIC: Check if the shape (subtype) is correct
+          const isShapeWrong = match.subType !== ca.subType;
+
+          if (isSpecificSection && isShapeWrong) {
+             // STRICT MODE: If grading a specific type (e.g. PK), wrong shape = 0 points.
+             let errorMsg = `${ca.name} (Incorrect Notation: You used '${match.subType}', expected '${ca.subType}')`;
+             
+             // Friendly error messages
+             if (ca.subType === 'primary_key') errorMsg = `${ca.name} is a Primary Key but was not underlined.`;
+             if (ca.subType === 'multivalued') errorMsg = `${ca.name} is Multivalued but missing double oval.`;
+             if (ca.subType === 'derived') errorMsg = `${ca.name} is Derived but missing dashed oval.`;
+
+             incorrect.push(errorMsg);
+             matchedStudentIds.add(match.id);
           } else {
+             // LENIENT MODE: If grading general "Attributes", we give points even if shape is wrong
+             // (because the penalty is applied in the specific section above/below).
              correctCount++;
-             if (match.name !== ca.name) {
-                correctItems.push(`${ca.name} (Note: '${match.name}')`);
-             } else {
-                correctItems.push(ca.name);
-             }
+             
+             let note = "";
+             if (match.name !== ca.name) note += ` (Note: You wrote '${match.name}')`;
+             
+             correctItems.push(ca.name + note);
+             matchedStudentIds.add(match.id);
           }
-          matchedStudentIds.add(match.id);
         } else {
           missing.push(`${ca.name} in ${ca.belongsTo}`);
         }
