@@ -102,9 +102,18 @@ REJECT IF (set isERD=false and provide rejectionReason):
 - Other diagram types → "This is not an ERD diagram"
 
 DETECT ALL:
-✅ Entities (strong=single rectangle, weak=double rectangle, associative=diamond inside rectangle))
-✅ Relationships (strong=single diamond, weak=double diamond) with cardinality from BOTH sides
-✅ Attributes with correct subTypes:
+DETECT ALL:
+1. ASSOCIATIVE ENTITIES (CRITICAL CHECK FIRST):
+   - Look for a DIAMOND shape INSIDE a RECTANGLE.
+   - If a diamond is enclosed in a rectangle, you MUST classify it as:
+     { "type": "entity", "subType": "associative" }
+   - DO NOT classify this as a "relationship". It acts as an entity.
+
+2. ENTITIES:
+   - Strong: Single Rectangle
+   - Weak: Double Rectangle / Rectangle within a Rectangle
+
+3. Attributes with correct subTypes:
    - primary_key: SINGLE UNDERLINED text only (dont assume from name)
    - multivalued: DOUBLE circle/oval border
    - derived: dashed circle/oval
