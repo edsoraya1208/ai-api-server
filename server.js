@@ -222,7 +222,7 @@ app.post('/detect-rubric', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout',
+        model: 'google/gemini-2.5-flash-preview-09-2025',
         messages: [{
           role: 'user',
           content: `Analyze this grading rubric text. Return ONLY valid JSON with no markdown formatting.
