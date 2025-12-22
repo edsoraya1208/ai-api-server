@@ -516,7 +516,9 @@ function calculateGrades(studentElements, correctElements, rubric) {
 
   rubric.criteria.forEach(criterion => {
     const { category, maxPoints, description } = criterion;
-    
+    const categoryLower = category.toLowerCase();
+
+    // 1. Extract Multipliers (e.g., "0.5 x 4")
     const multiplierMatch = description.match(/([\d.]+)\s*x\s*(\d+)/);
     let multiplier = 1;
     let expectedCount = 0;
@@ -531,18 +533,18 @@ function calculateGrades(studentElements, correctElements, rubric) {
     let incorrect = [];
     let correctItems = [];
 
-    const categoryLower = category.toLowerCase();
-
     // ===========================
     // A. ENTITY MATCHING
     // ===========================
     if (categoryLower.includes('entit')) {
-      const correctEntities = correctElements.filter(e => e.type === 'entity');
+      // ✅ SMART CHANGE 1: Use Filter to handle "Weak Entities" vs "Entities"
+      const targetCorrectElements = filterElementsByContext(correctElements, 'entity', categoryLower);
       const studentEntities = studentElements.filter(e => e.type === 'entity');
       
-      if (!multiplierMatch) expectedCount = correctEntities.length;
+      // If rubric didn't say "x 4", calculate expected count based on our filtered list
+      if (!multiplierMatch) expectedCount = targetCorrectElements.length;
       
-      correctEntities.forEach(ce => {
+      targetCorrectElements.forEach(ce => {
         // 1. Find Name Match
         const match = studentEntities.find(se => 
            areStringsSemanticallySimilar(se.name, ce.name)
@@ -553,11 +555,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
           if (match.subType !== ce.subType) {
               // WRONG SHAPE = NO POINTS
               incorrect.push(`${ce.name} (Incorrect Type: You used '${match.subType}', expected '${ce.subType}')`);
-              matchedStudentIds.add(match.id); // Mark as seen so it doesn't show as "Extra"
+              matchedStudentIds.add(match.id); 
           } else {
               // CORRECT SHAPE = POINTS
               correctCount++;
-              // Lenient Naming Check
               if (match.name !== ce.name) {
                  correctItems.push(`${ce.name} (Note: You wrote '${match.name}')`);
               } else {
@@ -570,29 +571,20 @@ function calculateGrades(studentElements, correctElements, rubric) {
           missing.push(ce.name);
         }
       });
-
-      // Find Extras
-      studentEntities.forEach(se => {
-          if (!matchedStudentIds.has(se.id)) {
-              incorrect.push(`Extra/Incorrect Entity: ${se.name}`);
-          }
-      });
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING (STRICT DERIVED CHECK)
+    // B. ATTRIBUTE & KEY MATCHING
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
-      const isPK = categoryLower.includes('primary') || categoryLower.includes('key');
-      const targetSubType = isPK ? 'primary_key' : null;
-
-      // Filter lists based on what we are currently grading (Attributes vs PKs)
-      const correctAttrs = correctElements.filter(e => e.type === 'attribute' && (!targetSubType || e.subType === targetSubType));
-      const studentAttrs = studentElements.filter(e => e.type === 'attribute' && (!targetSubType || e.subType === targetSubType));
+      // ✅ SMART CHANGE 2: Use Filter to handle "Primary Keys" vs "Attributes" vs "Multivalued"
+      const targetCorrectElements = filterElementsByContext(correctElements, 'attribute', categoryLower);
+      const studentAttrs = studentElements.filter(e => e.type === 'attribute');
       
-      if (!multiplierMatch) expectedCount = correctAttrs.length;
+      const isPKSection = categoryLower.includes('primary') || categoryLower.includes('key');
+      if (!multiplierMatch) expectedCount = targetCorrectElements.length;
       
-      correctAttrs.forEach(ca => {
+      targetCorrectElements.forEach(ca => {
         const match = studentAttrs.find(sa => {
           const nameMatch = areStringsSemanticallySimilar(sa.name, ca.name);
           const mappedParent = entityMap[sa.belongsTo] || sa.belongsTo;
@@ -601,12 +593,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
-          // STRICT TYPE CHECK (Ignore for PKs as they are filtered by category already)
-          if (!isPK && match.subType !== ca.subType) {
-             // WRONG SHAPE = NO POINTS
+          // STRICT TYPE CHECK (Skip for PKs as the filter already grabbed PKs)
+          if (!isPKSection && match.subType !== ca.subType) {
              incorrect.push(`${ca.name} (Incorrect Type: You used '${match.subType}' oval, expected '${ca.subType}' oval)`);
           } else {
-             // CORRECT SHAPE = POINTS
              correctCount++;
              if (match.name !== ca.name) {
                 correctItems.push(`${ca.name} (Note: '${match.name}')`);
@@ -619,25 +609,18 @@ function calculateGrades(studentElements, correctElements, rubric) {
           missing.push(`${ca.name} in ${ca.belongsTo}`);
         }
       });
-
-      // Find Extras
-      studentAttrs.forEach(sa => {
-          if (!matchedStudentIds.has(sa.id)) {
-              incorrect.push(`Unexpected attribute: '${sa.name}' in ${sa.belongsTo}`);
-          }
-      });
     }
 
     // ===========================
     // C. RELATIONSHIP MATCHING
     // ===========================
     else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
-      const correctRels = correctElements.filter(e => e.type === 'relationship');
+      const targetCorrectElements = filterElementsByContext(correctElements, 'relationship', categoryLower);
       const studentRels = studentElements.filter(e => e.type === 'relationship');
       
-      if (!multiplierMatch) expectedCount = correctRels.length;
+      if (!multiplierMatch) expectedCount = targetCorrectElements.length;
       
-      correctRels.forEach(cr => {
+      targetCorrectElements.forEach(cr => {
         const match = studentRels.find(sr => {
            const sFrom = entityMap[sr.from] || sr.from;
            const sTo = entityMap[sr.to] || sr.to;
@@ -648,12 +631,9 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
-          // STRICT TYPE CHECK (Weak vs Strong Diamond)
           if (match.subType !== cr.subType) {
-             // WRONG SHAPE = NO POINTS
              incorrect.push(`${cr.name} (Incorrect Type: You used '${match.subType}' diamond, expected '${cr.subType}')`);
           } else {
-             // CORRECT
              correctCount++;
              if (match.name !== cr.name) {
                 correctItems.push(`${cr.name} (Note: '${match.name}')`);
@@ -667,6 +647,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
         }
       });
       
+      // Mark extras (only if we haven't seen them yet)
       studentRels.forEach(sr => {
           if (!matchedStudentIds.has(sr.id)) {
               incorrect.push(`Extra relationship: ${sr.name}`);
@@ -706,12 +687,10 @@ function calculateGrades(studentElements, correctElements, rubric) {
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
                 const [sToMin, sToMax] = (studentToVal || '..').split('..');
 
-                // ✅ UPDATE 1: Add context to error messages so AI understands them (entity from and to)
                 if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { 
                     correctCount++; 
                     correctItems.push(`${cr.name} start-min`); 
                 } else {
-                    // UPDATED: Added "(between ${cr.from} & ${cr.to})"
                     incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.from} min-cardinality (Exp:${cFromMin} Found:${sFromMin})`);
                 }
 
@@ -719,7 +698,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
                     correctCount++; 
                     correctItems.push(`${cr.name} start-max`); 
                 } else {
-                    // UPDATED
                     incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.from} max-cardinality (Exp:${cFromMax} Found:${sFromMax})`);
                 }
 
@@ -727,7 +705,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
                     correctCount++; 
                     correctItems.push(`${cr.name} end-min`); 
                 } else {
-                    // UPDATED
                     incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.to} min-cardinality (Exp:${cToMin} Found:${sToMin})`);
                 }
 
@@ -735,7 +712,6 @@ function calculateGrades(studentElements, correctElements, rubric) {
                     correctCount++; 
                     correctItems.push(`${cr.name} end-max`); 
                 } else {
-                    // UPDATED
                     incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.to} max-cardinality (Exp:${cToMax} Found:${sToMax})`);
                 }
             } else {
@@ -779,7 +755,54 @@ function calculateGrades(studentElements, correctElements, rubric) {
   return result;
 }
 
-// HELPER: Fuzzy String Matcher (Professional "Stemming" Version)
+// ===========================
+// HELPER FUNCTIONS
+// ===========================
+
+// 🆕 SMART HELPER: Selects which elements to grade based on the Rubric Row name
+function filterElementsByContext(elements, type, context) {
+  const ctx = context.toLowerCase();
+  
+  // 1. Get all items of the right type (e.g. all Attributes)
+  let filtered = elements.filter(e => e.type === type);
+
+  // 2. SAFETY CHECK: If the rubric is asking for a SPECIFIC subtype, filter for it.
+  
+  // --- ATTRIBUTE FILTERS (Unchanged) ---
+  if (type === 'attribute') {
+    if (ctx.includes('multi')) return filtered.filter(e => e.subType === 'multivalued');
+    if (ctx.includes('composite')) return filtered.filter(e => e.subType === 'composite');
+    if (ctx.includes('derived')) return filtered.filter(e => e.subType === 'derived');
+    if (ctx.includes('primary') || ctx.includes('identifier') || ctx.includes('key')) {
+        return filtered.filter(e => e.subType === 'primary_key');
+    }
+    return filtered; // Return ALL if generic
+  }
+
+  // --- ENTITY FILTERS (Unchanged) ---
+  if (type === 'entity') {
+    if (ctx.includes('weak')) return filtered.filter(e => e.subType === 'weak');
+    if (ctx.includes('associative')) return filtered.filter(e => e.subType === 'associative');
+    return filtered; // Return ALL if generic
+  } 
+
+  // --- RELATIONSHIP FILTERS (✅ NEW ADDITION) ---
+  if (type === 'relationship') {
+      // If rubric says "Weak Relationship" or "Identifying Relationship"
+      if (ctx.includes('weak') || ctx.includes('identifying')) {
+          return filtered.filter(e => e.subType === 'weak');
+      }
+      // If rubric says "Associative" (sometimes people call the relationship associative)
+      if (ctx.includes('associative')) {
+           return filtered.filter(e => e.subType === 'associative');
+      }
+      
+      return filtered; // Return ALL if generic "Relationships"
+  }
+
+  return filtered;
+}
+
 // HELPER: Fuzzy String Matcher (The "Smart Bouncer")
 function areStringsSemanticallySimilar(str1, str2) {
   if (!str1 || !str2) return false;
@@ -788,35 +811,28 @@ function areStringsSemanticallySimilar(str1, str2) {
   const s1 = str1.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const s2 = str2.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 2. Exact Match (The fastest check)
+  // 2. Exact Match
   if (s1 === s2) return true;
 
-  // 3. The "Lazy Substring" Fix (Solves: rental_duration vs duration)
-  // Logic: If one is inside the other, and the shorter one is > 3 letters.
-  // We use >3 to prevent 'id' matching 'valid' or 'car' matching 'scary'.
+  // 3. The "Lazy Substring" Fix
   if (s1.includes(s2) && s2.length > 3) return true;
   if (s2.includes(s1) && s1.length > 3) return true;
 
-  // 4. The "Plural/Stemming" Fix (Solves: car vs cars, assign vs assigned)
+  // 4. Plurals/Stemming
   const MIN_LEN = 3; 
   if (s1.length >= MIN_LEN && s2.length >= MIN_LEN) {
-    // Plurals
     if (s1 === s2 + 's' || s2 === s1 + 's') return true;
     if (s1 === s2 + 'es' || s2 === s1 + 'es') return true;
-    // Past Tense
     if (s1.endsWith('ed') && s1.slice(0, -2) === s2) return true;
     if (s2.endsWith('ed') && s2.slice(0, -2) === s1) return true;
-    if (s1.endsWith('d') && s1.slice(0, -1) === s2) return true;
-    if (s2.endsWith('d') && s2.slice(0, -1) === s1) return true;
   }
 
-  // 5. Word Bag (Solves: "Driver ID" vs "ID Driver")
+  // 5. Word Bag
   const words1 = str1.toLowerCase().split(/[\s_]+/).sort().join('');
   const words2 = str2.toLowerCase().split(/[\s_]+/).sort().join('');
   if (words1 === words2) return true;
 
-  // 6. The "Typo" Fix (Solves: Pickip vs Pickup)
-  // Logic: Calculate distance. Allow 1 error for medium words, 2 for long words.
+  // 6. Typo Fix (Levenshtein)
   const len = Math.max(s1.length, s2.length);
   const allowedErrors = len > 6 ? 2 : (len > 3 ? 1 : 0);
 
@@ -828,36 +844,23 @@ function areStringsSemanticallySimilar(str1, str2) {
   return false;
 }
 
-// HELPER: Levenshtein Distance (Counts character differences)
-// Returns the number of edits needed to turn string 'a' into string 'b'
+// HELPER: Levenshtein Distance
 function getLevenshteinDistance(a, b) {
   const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
 
-  // 1. Setup grid
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  // 2. Fill grid
   for (let i = 1; i <= b.length; i++) {
     for (let j = 1; j <= a.length; j++) {
       if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1]; // No change needed
+        matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // Substitution
-          Math.min(
-            matrix[i][j - 1] + 1,   // Insertion
-            matrix[i - 1][j] + 1    // Deletion
-          )
+          matrix[i - 1][j - 1] + 1,
+          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
         );
       }
     }
   }
-
   return matrix[b.length][a.length];
 }
