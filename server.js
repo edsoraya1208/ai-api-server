@@ -349,7 +349,7 @@ app.post('/autograde-erd', async (req, res) => {
     // STEP 2: AI GENERATES FEEDBACK ONLY (SAFE MODE)
     // ===========================
     const prompt = `You are an expert Database Professor grading an ERD.
-    
+
     INPUT DATA:
     Total Score: ${grading.totalScore} / ${grading.maxScore}
     
@@ -365,31 +365,46 @@ app.post('/autograde-erd', async (req, res) => {
     CRITICAL INSTRUCTIONS:
     1. **Grouping**: 
        - In the "correct" list, group simple items by category on one line.
-       - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text. **DO NOT** remove the note to make it look "clean".
-       - Example Output: "Entities: CUSTOMER, RENTAL, CAR (Note: You wrote 'Cars')"
+       - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text.
     
-   2. **Concise Educational Explanations**:
-       - You MUST explain the database concept, but keep it to **MAXIMUM 2 SENTENCES**.
+   2. **Concise Educational Explanations (The "Smart" Part)**:
+       - **Primary Keys**: 
+         - **Rule**: Must be a **Single Oval** with **Solid Underlined Text**.
+         - **Explanation**: If missing, explain that the underline signifies the attribute is the **Unique Identifier** and cannot be null.
        
-       - **Derived Attributes**: Explain they are calculated from other specific attributes found in the diagram (look at the 'Correct' list and explicitly name the likely source attributes) and must use dashed ovals.
-       - **Multivalued**: Look at the attribute name (e.g. "Phone") and briefly explain why it allows multiple entries (e.g. "A person can have multiple phone numbers").
-       - **Style**: Be helpful and specific, but do NOT write full paragraphs or general definitions.
+       - **Multivalued Attributes**: 
+         - **Rule**: Must be a **Double Oval**.
+         - **Explanation**: Explain that the attribute (e.g., "Phone") logically allows multiple entries for one entity (e.g. "A person can have multiple phone numbers")
+       
+       - **Derived Attributes**: 
+         - **Rule**: Must be a **Dashed Oval**.
+         - **Explanation**: Mention it is calculated from another attribute (look at the 'Correct' list to infer which one, e.g., "duration is likely derived from pickup_date and return_date").
 
-       ✅ SMART CARDINALITY LOGIC:
-       - **Cardinality**: Look at the Entity name in the error (e.g., "towards Patient"). Explain the logic using that specific entity.
-         - If Exp: 0, Found: 1 -> "Expected 0 (Optional): A [Other Entity] can exist without a [Target Entity]."
-         - If Exp: 1, Found: 0 -> "Expected 1 (Mandatory): A [Other Entity] must have at least one [Target Entity] to exist."
+       - **Foreign Keys**: 
+         - **Rule**: Dashed underline (if that's the error). Explain it links to another entity's Primary Key.
 
-       ✅ EXTRA ELEMENTS LOGIC (REQUIRED TO SHOW EXTRAS):
-       - **Extra/Unexpected Elements**: If the 'ITEMS MARKED INCORRECT' list contains "Extra", "Unexpected", or "Incorrect Type", you MUST include them in the output. 
-         - For "Extra": Feedback: "This element is not part of the solution requirements."
-         - For "Incorrect Type": Explain why the shape used is wrong (e.g. "Diamond is for relationships").
+   3. **✅ HUMAN VARIATION (CRITICAL)**:
+       - **NO ROBOTIC REPETITION**: If the student makes the *same* mistake twice (e.g., 2 Primary Keys not underlined), **DO NOT** use the exact same sentence.
+       - **First Instance**: Explain the concept fully (e.g., "VehicleID needs an underline to show it is the unique identifier.").
+       - **Second Instance**: Be briefer or vary the wording (e.g., "Similarly, DriverID is a primary key and requires standard underlining notation.").
+       - **Make it flow**: Read the errors like a human grading a paper, not a machine printing a log.
 
-    3. **SAFETY GUARDRAIL**:
-       - **DO NOT** invent business rules.
-       - Use phrases like "This implies..." rather than "The requirements stated...".
+   4. **✅ SMART CARDINALITY & BUSINESS LOGIC**:
+       - **Context**: If the error includes "(between Entity A & Entity B)", use those names!
+       - **Logic**:
+         - If Exp: 0, Found: 1 -> Explain **Optionality** ("A [Entity A] does not *need* to have a [Entity B]...").
+         - If Exp: 1, Found: 0 -> Explain **Mandatory Existence** ("A [Entity A] *must* be associated with at least one [Entity B]...").
+         - If Exp: 1, Found: M -> Explain **Uniqueness** ("A [Entity A] can only have *one* [Entity B], not many.").
+         
+  5. **✅ EXTRA ELEMENTS LOGIC**:
+       - **Decide Relevance**: Check if the extra element makes sense in the real world alongside the Correct Entities.
+       - **If Logical but Out of Scope**: Say: "While logical in a real-world scenario, the scope of this exercise is limited to tracking [Main Entities from Correct List], so this element is excluded for simplicity."
+       - **If Irrelevant or Redundant**: Say: "This element is not required unless explicitly specified in the question."
+       - **Incorrect Types**: Explain shape errors (e.g. "Diamond is for relationships, Rectangle is for entities").
 
-    4. **Tone**: Encouraging but direct.
+    6. **SAFETY GUARDRAIL**:
+       - **DO NOT** invent business rules. Use phrases like "This implies..."
+       - **Tone**: Encouraging but direct.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
@@ -403,7 +418,7 @@ app.post('/autograde-erd', async (req, res) => {
       },
       "overallComment": "Summary comment."
     }`;
-    
+
     const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -411,7 +426,7 @@ app.post('/autograde-erd', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+        model: 'google/gemini-2.5-flash',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 2500
@@ -691,19 +706,38 @@ function calculateGrades(studentElements, correctElements, rubric) {
                 const [sFromMin, sFromMax] = (studentFromVal || '..').split('..');
                 const [sToMin, sToMax] = (studentToVal || '..').split('..');
 
-                // ✅ UPDATE 1: Add context to error messages so AI understands them
-                if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { correctCount++; correctItems.push(`${cr.name} start-min`); }
-                else incorrect.push(`${cr.name} (towards ${cr.from}) min-cardinality (Exp:${cFromMin} Found:${sFromMin})`);
+                // ✅ UPDATE 1: Add context to error messages so AI understands them (entity from and to)
+                if (areStringsSemanticallySimilar(sFromMin, cFromMin)) { 
+                    correctCount++; 
+                    correctItems.push(`${cr.name} start-min`); 
+                } else {
+                    // UPDATED: Added "(between ${cr.from} & ${cr.to})"
+                    incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.from} min-cardinality (Exp:${cFromMin} Found:${sFromMin})`);
+                }
 
-                if (areStringsSemanticallySimilar(sFromMax, cFromMax)) { correctCount++; correctItems.push(`${cr.name} start-max`); }
-                else incorrect.push(`${cr.name} (towards ${cr.from}) max-cardinality (Exp:${cFromMax} Found:${sFromMax})`);
+                if (areStringsSemanticallySimilar(sFromMax, cFromMax)) { 
+                    correctCount++; 
+                    correctItems.push(`${cr.name} start-max`); 
+                } else {
+                    // UPDATED
+                    incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.from} max-cardinality (Exp:${cFromMax} Found:${sFromMax})`);
+                }
 
-                if (areStringsSemanticallySimilar(sToMin, cToMin)) { correctCount++; correctItems.push(`${cr.name} end-min`); }
-                else incorrect.push(`${cr.name} (towards ${cr.to}) min-cardinality (Exp:${cToMin} Found:${sToMin})`);
+                if (areStringsSemanticallySimilar(sToMin, cToMin)) { 
+                    correctCount++; 
+                    correctItems.push(`${cr.name} end-min`); 
+                } else {
+                    // UPDATED
+                    incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.to} min-cardinality (Exp:${cToMin} Found:${sToMin})`);
+                }
 
-                if (areStringsSemanticallySimilar(sToMax, cToMax)) { correctCount++; correctItems.push(`${cr.name} end-max`); }
-                else incorrect.push(`${cr.name} (towards ${cr.to}) max-cardinality (Exp:${cToMax} Found:${sToMax})`);
-
+                if (areStringsSemanticallySimilar(sToMax, cToMax)) { 
+                    correctCount++; 
+                    correctItems.push(`${cr.name} end-max`); 
+                } else {
+                    // UPDATED
+                    incorrect.push(`${cr.name} (between ${cr.from} & ${cr.to}) towards ${cr.to} max-cardinality (Exp:${cToMax} Found:${sToMax})`);
+                }
             } else {
                if ((studentFromVal || '').includes(cr.cardinalityFrom) || (cr.cardinalityFrom || '').includes(studentFromVal)) {
                    correctCount++; correctItems.push(`${cr.name} start`);
