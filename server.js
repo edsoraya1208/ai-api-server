@@ -102,7 +102,6 @@ REJECT IF (set isERD=false and provide rejectionReason):
 - Other diagram types → "This is not an ERD diagram"
 
 DETECT ALL:
-DETECT ALL:
 1. ASSOCIATIVE ENTITIES (CRITICAL CHECK FIRST):
    - Look for a DIAMOND shape INSIDE a RECTANGLE.
    - If a diamond is enclosed in a rectangle, you MUST classify it as:
@@ -147,9 +146,10 @@ REQUIRED FIELDS:
 - If cardinality OR attribute border unclear → max confidence 75
 - If NOT an ERD: MUST include "rejectionReason" explaining what it is instead
 
-AVOID COMMON MISTAKES:
+IMPORTANT (AVOID COMMON MISTAKES):
 1. If an attribute name contains "ID" but has NO physical underline, NEVER EVER RETURN AS PK.
-2. If a relationship line has no visible text (min max cardinality), you MUST ALWAYS return "none..none" for cardinality.
+2. Derived attributes are dashed ovals.
+3. If a relationship line has no visible text (min max cardinality), you MUST ALWAYS return "none..none" for cardinality.
 
 Return ONLY the JSON object.`
             },
