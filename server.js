@@ -568,36 +568,37 @@ function calculateGrades(studentElements, correctElements, rubric) {
     let correctItems = [];
 
     // ===========================
-    // A. ENTITY MATCHING
+    // A. ENTITY MATCHING (STRICT)
     // ===========================
     if (categoryLower.includes('entit')) {
-      // ✅ SMART CHANGE 1: Use Filter to handle "Weak Entities" vs "Entities"
       const targetCorrectElements = filterElementsByContext(correctElements, 'entity', categoryLower);
       const studentEntities = studentElements.filter(e => e.type === 'entity');
       
-      // If rubric didn't say "x 4", calculate expected count based on our filtered list
       if (!multiplierMatch) expectedCount = targetCorrectElements.length;
       
       targetCorrectElements.forEach(ce => {
-        // 1. Find Name Match
         const match = studentEntities.find(se => 
            areStringsSemanticallySimilar(se.name, ce.name)
         );
         
         if (match) {
-          // 2. STRICT TYPE CHECK
+          // 🛑 STRICT CHECK: Shape (subType) must match exactly
           if (match.subType !== ce.subType) {
-              // WRONG SHAPE = NO POINTS
-              incorrect.push(`${ce.name} (Incorrect Type: You used '${match.subType}', expected '${ce.subType}')`);
+              let errorMsg = `${ce.name} (Incorrect Notation: You used '${match.subType}', expected '${ce.subType}')`;
+              
+              if (ce.subType === 'weak') errorMsg = `${ce.name} is a Weak Entity but missing double rectangle.`;
+              if (ce.subType === 'associative') errorMsg = `${ce.name} is an Associative Entity but missing diamond-in-rectangle.`;
+              
+              incorrect.push(errorMsg);
               matchedStudentIds.add(match.id); 
           } else {
-              // CORRECT SHAPE = POINTS
+              // ✅ Correct Name AND Correct Shape
               correctCount++;
-              if (match.name !== ce.name) {
-                 correctItems.push(`${ce.name} (Note: You wrote '${match.name}')`);
-              } else {
-                 correctItems.push(ce.name);
-              }
+              
+              let note = "";
+              if (match.name !== ce.name) note += ` (Note: You wrote '${match.name}')`;
+              
+              correctItems.push(ce.name + note);
               entityMap[match.name] = ce.name;
               matchedStudentIds.add(match.id);
           }
@@ -608,20 +609,11 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // B. ATTRIBUTE & KEY MATCHING (SMART HYBRID)
+    // B. ATTRIBUTE & KEY MATCHING (ALWAYS STRICT)
     // ===========================
     else if (categoryLower.includes('attribute') || categoryLower.includes('key')) {
       const targetCorrectElements = filterElementsByContext(correctElements, 'attribute', categoryLower);
       const studentAttrs = studentElements.filter(e => e.type === 'attribute');
-      
-      // 1. DYNAMIC STRICT MODE CHECK
-      // If the rubric category title mentions a specific type, we enforce STRICT shape matching.
-      // If it's just "Attributes", we are LENIENT (name match only).
-      const isSpecificSection = categoryLower.includes('primary') || 
-                                categoryLower.includes('key') || 
-                                categoryLower.includes('derived') ||
-                                categoryLower.includes('composite') ||
-                                categoryLower.includes('multi'); // Covers 'multivalued'
       
       if (!multiplierMatch) expectedCount = targetCorrectElements.length;
       
@@ -634,23 +626,23 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
-          // LOGIC: Check if the shape (subtype) is correct
-          const isShapeWrong = match.subType !== ca.subType;
-
-          if (isSpecificSection && isShapeWrong) {
-             // STRICT MODE: If grading a specific type (e.g. PK), wrong shape = 0 points.
+          // 🛑 STRICT CHECK: The Shape (subType) MUST match exactly.
+          // If rubric expects 'derived' (dashed), and student used 'regular' (solid) -> FAIL (0 Marks).
+          // If rubric expects 'primary_key' (underlined), and student used 'regular' -> FAIL (0 Marks).
+          
+          if (match.subType !== ca.subType) {
              let errorMsg = `${ca.name} (Incorrect Notation: You used '${match.subType}', expected '${ca.subType}')`;
              
-             // Friendly error messages
+             // Clear feedback messages
              if (ca.subType === 'primary_key') errorMsg = `${ca.name} is a Primary Key but was not underlined.`;
+             if (ca.subType === 'derived') errorMsg = `${ca.name} is a Derived Attribute but missing dashed oval.`;
              if (ca.subType === 'multivalued') errorMsg = `${ca.name} is Multivalued but missing double oval.`;
-             if (ca.subType === 'derived') errorMsg = `${ca.name} is Derived but missing dashed oval.`;
+             if (ca.subType === 'composite') errorMsg = `${ca.name} is Composite but missing correct notation.`;
 
              incorrect.push(errorMsg);
-             matchedStudentIds.add(match.id);
+             matchedStudentIds.add(match.id); // Mark as seen so we don't count it as extra later
           } else {
-             // LENIENT MODE: If grading general "Attributes", we give points even if shape is wrong
-             // (because the penalty is applied in the specific section above/below).
+             // ✅ ONLY Award points if BOTH Name AND Shape are correct
              correctCount++;
              
              let note = "";
@@ -666,7 +658,7 @@ function calculateGrades(studentElements, correctElements, rubric) {
     }
 
     // ===========================
-    // C. RELATIONSHIP MATCHING
+    // C. RELATIONSHIP MATCHING (STRICT)
     // ===========================
     else if (categoryLower.includes('relationship') && !categoryLower.includes('cardinality')) {
       const targetCorrectElements = filterElementsByContext(correctElements, 'relationship', categoryLower);
@@ -685,23 +677,30 @@ function calculateGrades(studentElements, correctElements, rubric) {
         });
         
         if (match) {
+          // 🛑 STRICT CHECK: Shape (subType) must match exactly
           if (match.subType !== cr.subType) {
-             incorrect.push(`${cr.name} (Incorrect Type: You used '${match.subType}' diamond, expected '${cr.subType}')`);
+             let errorMsg = `${cr.name} (Incorrect Notation: You used '${match.subType}', expected '${cr.subType}')`;
+             
+             if (cr.subType === 'weak') errorMsg = `${cr.name} is a Weak Relationship but missing double diamond.`;
+             
+             incorrect.push(errorMsg);
+             matchedStudentIds.add(match.id);
           } else {
+             // ✅ Correct Name AND Correct Shape
              correctCount++;
-             if (match.name !== cr.name) {
-                correctItems.push(`${cr.name} (Note: '${match.name}')`);
-             } else {
-                correctItems.push(cr.name);
-             }
+             
+             let note = "";
+             if (match.name !== cr.name) note += ` (Note: You wrote '${match.name}')`;
+             
+             correctItems.push(cr.name + note);
+             matchedStudentIds.add(match.id);
           }
-          matchedStudentIds.add(match.id);
         } else {
           missing.push(`${cr.name} between ${cr.from} and ${cr.to}`);
         }
       });
       
-      // Mark extras (only if we haven't seen them yet)
+      // Mark extras
       studentRels.forEach(sr => {
           if (!matchedStudentIds.has(sr.id)) {
               incorrect.push(`Extra relationship: ${sr.name}`);
