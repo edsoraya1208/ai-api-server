@@ -71,7 +71,9 @@ app.post('/detect-erd', async (req, res) => {
               text: `Analyze this ERD diagram. Return ONLY valid JSON, no markdown.
 
 CRITICAL DETECTION RULES (MUST FOLLOW):
-1. PRIMARY KEYS: Text MUST be UNDERLINED. If text has "ID" but NO underline, it is a "regular" attribute. DO NOT GUESS.
+1. PRIMARY KEYS (STRICT VISUAL CHECK):
+   - **VISUAL RULE**: Attribute is "primary_key" ONLY if text has a visible underline.
+   - **TRAP**: If name has "ID" (e.g. Driver_ID) but NO underline, it is "regular".
 2. MULTIVALUED attributes have DOUBLE OVALS/circles - detect the double border
 3. CARDINALITY must be read from BOTH sides of relationship 
    - Look for (0,M), (1,1), (0,1), (1,M) notation near EACH entity
@@ -147,7 +149,7 @@ REQUIRED FIELDS:
 - If NOT an ERD: MUST include "rejectionReason" explaining what it is instead
 
 IMPORTANT (AVOID COMMON MISTAKES):
-1. If an attribute name contains "ID" but has NO physical underline, NEVER EVER RETURN AS PK.
+1. NO UNDERLINE = NO PRIMARY KEY (even if name contains "ID").
 2. Derived attributes are dashed ovals.
 3. If a relationship line has no visible text (min max cardinality), you MUST ALWAYS return "none..none" for cardinality.
 
@@ -460,7 +462,7 @@ app.post('/autograde-erd', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-flash-lite',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 2500
