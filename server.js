@@ -127,8 +127,9 @@ RESPONSE FORMAT FOR ERD:
   "isERD": true,
   "elements": [
     {"id": "el_1", "name": "Patient", "type": "entity", "subType": "strong", "confidence": 95},
-    {"id": "el_2", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..M", "cardinalityTo": "1..1", "confidence": 88},
-    {"id": "el_3", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
+    {"id": "el_2", "name": "appointement", "type": "entity", "subType": "associative", "confidence": 95},
+    {"id": "el_3", "name": "visit", "type": "relationship", "subType": "strong", "from": "Patient", "to": "Doctor", "cardinalityFrom": "0..M", "cardinalityTo": "1..1", "confidence": 88},
+    {"id": "el_4", "name": "PatientID", "type": "attribute", "subType": "primary_key", "belongsTo": "Patient", "belongsToType": "entity", "confidence": 92}
   ]
 }
 
@@ -441,6 +442,10 @@ app.post('/autograde-erd', async (req, res) => {
     6. **SAFETY GUARDRAIL**:
        - **DO NOT** invent business rules. Use phrases like "This implies..."
        - **Tone**: Encouraging but direct.
+
+    7. STRICT FEEDBACK CONSTRAINT:
+        - The "incorrect" list is reserved for ACTUAL ERRORS (wrong answer, missing item) only.
+        - If an element (like a Primary Key) is identified correctly, do NOT add any text to the "incorrect" list.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
