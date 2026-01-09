@@ -404,7 +404,7 @@ app.post('/autograde-erd', async (req, res) => {
        - In the "correct" list, group simple items by category on one line.
        - **IF AN ITEM HAS A NOTE**: If the input says "Car (Note: You wrote 'Cars')", you **MUST** print that full text.
     
-   2. **Concise Educational Explanations (The "Smart" Part)**:
+   2. **Concise Educational Explanations (ONLY IF THEY ARE IN INCORRECT LIST)**:
        - **Primary Keys**: 
          - **Rule**: Must be a **Single Oval** with **Solid Underlined Text**.
          - **Explanation**: If missing, explain that the underline signifies the attribute is the **Unique Identifier** and cannot be null.
@@ -432,7 +432,7 @@ app.post('/autograde-erd', async (req, res) => {
        - **Logic**:
          - If Exp: 0, Found: 1 -> Explain **Optionality** ("A [Entity B] does not *need* to have a [Entity A]...").
          - If Exp: 1, Found: 0 -> Explain **Mandatory Existence** ("A [Entity B] *must* be associated with at least one [Entity A]...").
-         - If Exp: M, Found: 1 -> Explain Multiplicity ("You restricted this to '1', but it should be 'Many' (M). A [Entity A] needs to support multiple [Entity B]s.").
+         - If Exp: M, Found: 1 -> Explain Multiplicity (A [Entity A] needs to support multiple [Entity B]s...").
          - If Exp: 1, Found: M -> Explain **Uniqueness** ("A [Entity B] can only have *one* [Entity A], not many.").
          
   5. **✅ EXTRA ELEMENTS LOGIC**:
