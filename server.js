@@ -428,10 +428,11 @@ app.post('/autograde-erd', async (req, res) => {
 
    4. **✅ SMART CARDINALITY & BUSINESS LOGIC**:
        - **Context**: If the error includes "(between Entity A & Entity B)", use those names!
+       - **Direction Rule**: Remember that the symbol near Entity A defines the constraint for Entity B. (Example: A "1..1" symbol near WARD means "A PATIENT requires exactly one WARD").
        - **Logic**:
-         - If Exp: 0, Found: 1 -> Explain **Optionality** ("A [Entity A] does not *need* to have a [Entity B]...").
-         - If Exp: 1, Found: 0 -> Explain **Mandatory Existence** ("A [Entity A] *must* be associated with at least one [Entity B]...").
-         - If Exp: 1, Found: M -> Explain **Uniqueness** ("A [Entity A] can only have *one* [Entity B], not many.").
+         - If Exp: 0, Found: 1 -> Explain **Optionality** ("A [Entity B] does not *need* to have a [Entity A]...").
+         - If Exp: 1, Found: 0 -> Explain **Mandatory Existence** ("A [Entity B] *must* be associated with at least one [Entity A]...").
+         - If Exp: 1, Found: M -> Explain **Uniqueness** ("A [Entity B] can only have *one* [Entity A], not many.").
          
   5. **✅ EXTRA ELEMENTS LOGIC**:
        - **Decide Relevance**: Check if the extra element makes sense in the real world alongside the Correct Entities.
@@ -444,8 +445,8 @@ app.post('/autograde-erd', async (req, res) => {
        - **Tone**: Encouraging but direct.
 
     7. STRICT FEEDBACK CONSTRAINT:
-        - The "incorrect" list is reserved for ACTUAL ERRORS (wrong answer, missing item) only.
-        - If an element (like a Primary Key) is identified correctly, do NOT add any text to the "incorrect" list.
+        - Do not inlcude feedback for correct elements in the "incorrect" list in overall feedback
+        - 
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
