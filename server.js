@@ -80,6 +80,7 @@ CRITICAL DETECTION RULES (MUST FOLLOW):
    - OR look for M, 1, N letters near entities
    - from="EntityA" to="EntityB" means: EntityA's cardinality goes in cardinalityFrom, EntityB's in cardinalityTo
    - Example: Patient(0,M)─visit─(1,1)Doctor → from="Patient", cardinalityFrom="0..M", to="Doctor", cardinalityTo="1..1"
+   - **NAMING RULE**: If a relationship line exists but has NO visible text label (diamond is empty or missing), you MUST name it "EntityA_EntityB_relationship". Do NOT guess verbs like "rents", "has" etc.
 
 CARDINALITY MAPPING (based on what you see)
    - "0..M" (or 0,M) -> "0..M"
