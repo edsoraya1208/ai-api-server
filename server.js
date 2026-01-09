@@ -444,9 +444,10 @@ app.post('/autograde-erd', async (req, res) => {
        - **DO NOT** invent business rules. Use phrases like "This implies..."
        - **Tone**: Encouraging but direct.
 
-    7. STRICT FEEDBACK CONSTRAINT:
-        - Do not inlcude feedback for correct elements in the "incorrect" list in overall feedback
-        - 
+    7. 7. STRICT FEEDBACK CONSTRAINT (ABSOLUTE OUTPUT RULE):
+       - **SYNC INPUT & OUTPUT**: The 'incorrect' array in your final JSON response MUST match the "ITEMS MARKED INCORRECT" input list exactly. 
+       - **NO NEW ERRORS**: If the "ITEMS MARKED INCORRECT" input is empty, your 'incorrect' JSON output MUST be empty.
+       - **NO "TIPS"**: Do not put "educational tips" (e.g. "Remember to underline PKs") in the 'incorrect' list. Put them in 'correct' or omit them.
     
     OUTPUT JSON FORMAT (Must match exactly):
     {
