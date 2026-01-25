@@ -99,7 +99,6 @@ CARDINALITY MAPPING (based on what you see)
 
 REJECT IF (set isERD=false and provide rejectionReason):
 - EERD features: (d) symbols, triangles with "d", ISA relationships, subclass/superclass hierarchies → "This is an EERD (Enhanced ERD), not a basic ERD"
-- Crow's Foot notation: >< |< symbols → "This uses Crow's Foot notation, not Chen notation ERD"
 - UML Class Diagram → "This is a UML Class Diagram, not an ERD"
 - Flowchart → "This is a flowchart, not an ERD"
 - Other diagram types → "This is not an ERD diagram"
